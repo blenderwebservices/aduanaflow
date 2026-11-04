@@ -32,11 +32,5 @@
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "@types/express": "^4.17.21"
-  },
-  "allowScripts": {
-    "protobufjs@7.6.6": true,
-    "fsevents@2.3.3": true,
-    "esbuild@0.28.2": true,
-    "@google/genai@2.32.0": true
   }
 }
