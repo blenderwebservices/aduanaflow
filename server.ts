@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
 
@@ -360,12 +360,12 @@ app.post('/api/v1/ai/tariff-assistant', async (req: Request, res: Response) => {
   if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
     // Modo analítico inteligente sin API key externa
     const lower = productDescription.toLowerCase();
-    const matched = COMMON_TARIFFS.find(t => 
+    const matched = COMMON_TARIFFS.find(t =>
       lower.includes('laptop') || lower.includes('computadora') ? t.hsCode.startsWith('8471') :
-      lower.includes('playera') || lower.includes('camisa') || lower.includes('ropa') ? t.hsCode.startsWith('6109') :
-      lower.includes('zapato') || lower.includes('calzado') ? t.hsCode.startsWith('6403') :
-      lower.includes('vino') || lower.includes('alcohol') ? t.hsCode.startsWith('2204') :
-      lower.includes('juguete') ? t.hsCode.startsWith('9503') : false
+        lower.includes('playera') || lower.includes('camisa') || lower.includes('ropa') ? t.hsCode.startsWith('6109') :
+          lower.includes('zapato') || lower.includes('calzado') ? t.hsCode.startsWith('6403') :
+            lower.includes('vino') || lower.includes('alcohol') ? t.hsCode.startsWith('2204') :
+              lower.includes('juguete') ? t.hsCode.startsWith('9503') : false
     ) || COMMON_TARIFFS[0];
 
     res.json({
