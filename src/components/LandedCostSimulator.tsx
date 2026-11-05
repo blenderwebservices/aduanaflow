@@ -18,6 +18,7 @@ import {
   COMMON_TARIFFS,
   TariffCategory,
 } from '../utils/customsCalculations';
+import alexaAvatar from '../assets/images/alexa_founder_avatar_1793831212997.jpg';
 
 interface LandedCostSimulatorProps {
   isDark: boolean;
@@ -503,7 +504,7 @@ export const LandedCostSimulator: React.FC<LandedCostSimulatorProps> = ({
             }`}>
             <div className="flex items-start gap-3">
               <img
-                src="/src/assets/images/alexa_founder_avatar_1793831212997.jpg"
+                src={alexaAvatar}
                 alt="Alexa Sánchez"
                 className="h-9 w-9 rounded-full object-cover shrink-0"
                 referrerPolicy="no-referrer"

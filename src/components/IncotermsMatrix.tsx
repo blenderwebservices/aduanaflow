@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { INCOTERMS_2020, IncotermInfo } from '../utils/incotermsData';
+import alexaAvatar from '../assets/images/alexa_founder_avatar_1793831212997.jpg';
 
 interface IncotermsMatrixProps {
   isDark: boolean;
@@ -190,7 +191,7 @@ export const IncotermsMatrix: React.FC<IncotermsMatrixProps> = ({ isDark }) => {
           }`}>
           <div className="flex items-start gap-3">
             <img
-              src="/src/assets/images/alexa_founder_avatar_1793831212997.jpg"
+              src={alexaAvatar}
               alt="Alexa Sánchez"
               className="h-10 w-10 rounded-full object-cover shrink-0"
               referrerPolicy="no-referrer"

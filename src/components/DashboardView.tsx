@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { NavTab } from './Sidebar';
 import { ShipmentRecord } from '../../server';
+import heroCustomsImage from '../assets/images/hero_customs_logistics_1793831213651.jpg';
 
 interface DashboardViewProps {
   shipments: ShipmentRecord[];
@@ -85,7 +86,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="relative min-h-[220px] lg:col-span-5 overflow-hidden">
             <img
-              src="/src/assets/images/hero_customs_logistics_1793831213651.jpg"
+              src={heroCustomsImage}
               alt="Terminal portuaria de comercio internacional"
               className="h-full w-full object-cover lg:absolute lg:inset-0"
               referrerPolicy="no-referrer"
