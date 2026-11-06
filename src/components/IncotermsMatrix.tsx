@@ -11,6 +11,9 @@ import {
   Plane,
   ArrowRight,
   Sparkles,
+  Download,
+  Scale,
+  ShieldAlert,
 } from 'lucide-react';
 import { INCOTERMS_2020, IncotermInfo } from '../utils/incotermsData';
 import alexaAvatar from '../assets/images/alexa_founder_avatar_1793831212997.jpg';
@@ -64,35 +67,47 @@ export const IncotermsMatrix: React.FC<IncotermsMatrixProps> = ({ isDark }) => {
             </p>
           </div>
 
-          {/* Category Filter */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          {/* Category Filter & Print */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setFilterCategory('ALL')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${filterCategory === 'ALL'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
+              onClick={() => window.print()}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                isDark ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'
+              }`}
             >
-              Todos (11)
+              <Download className="h-3.5 w-3.5" />
+              <span>Imprimir Ficha</span>
             </button>
-            <button
-              onClick={() => setFilterCategory('MULTIMODAL')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${filterCategory === 'MULTIMODAL'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-            >
-              Multimodal (7)
-            </button>
-            <button
-              onClick={() => setFilterCategory('MARITIMO')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${filterCategory === 'MARITIMO'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-            >
-              Marítimo (4)
-            </button>
+
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setFilterCategory('ALL')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${filterCategory === 'ALL'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+              >
+                Todos (11)
+              </button>
+              <button
+                onClick={() => setFilterCategory('MULTIMODAL')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${filterCategory === 'MULTIMODAL'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+              >
+                Multimodal (7)
+              </button>
+              <button
+                onClick={() => setFilterCategory('MARITIMO')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${filterCategory === 'MARITIMO'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+              >
+                Marítimo (4)
+              </button>
+            </div>
           </div>
         </div>
 

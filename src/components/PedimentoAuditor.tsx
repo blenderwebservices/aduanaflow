@@ -11,6 +11,10 @@ import {
   Building,
   HelpCircle,
   FileSpreadsheet,
+  Upload,
+  Download,
+  FileText,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   auditPedimento,
@@ -19,6 +23,7 @@ import {
   VALID_CLAVES_PEDIMENTO,
   ADUANAS_MEXICO,
   validatePedimentoNumber,
+  parsePedimentoDocumentText,
 } from '../utils/pedimentoValidator';
 
 interface PedimentoAuditorProps {
@@ -29,6 +34,32 @@ export const PedimentoAuditor: React.FC<PedimentoAuditorProps> = ({ isDark }) =>
   // Current active pedimento data (defaults to sample 1)
   const [pedimento, setPedimento] = useState<PedimentoData>(SAMPLE_PEDIMENTOS[0].data);
   const [selectedPresetIndex, setSelectedPresetIndex] = useState<number>(0);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [showFileModal, setShowFileModal] = useState<boolean>(false);
+  const [pastedDocumentText, setPastedDocumentText] = useState<string>('');
+
+  // Handle uploaded file or pasted pedimento text
+  const handleParseText = (rawText: string) => {
+    if (!rawText.trim()) return;
+    const extracted = parsePedimentoDocumentText(rawText);
+    setPedimento(prev => ({
+      ...prev,
+      ...extracted,
+    }));
+    setUploadNotice(`Datos extraídos del documento: ${Object.keys(extracted).join(', ')}.`);
+    setShowFileModal(false);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      handleParseText(text);
+    };
+    reader.readAsText(file);
+  };
 
   // AI Tariff query state
   const [aiProductQuery, setAiProductQuery] = useState<string>('');
@@ -86,6 +117,37 @@ export const PedimentoAuditor: React.FC<PedimentoAuditorProps> = ({ isDark }) =>
 
   return (
     <div className="space-y-6">
+      {/* Permanent SAT / ANAM Disclaimer Banner */}
+      <div className={`p-4 rounded-xl border flex items-start gap-3 ${
+        isDark ? 'border-amber-500/30 bg-amber-950/20 text-amber-200' : 'border-amber-300 bg-amber-50 text-amber-900'
+      }`}>
+        <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div className="text-xs leading-relaxed">
+          <strong className="block font-bold mb-0.5">
+            Aviso de Auditoría Preventiva e Independencia Institucional:
+          </strong>
+          Esta herramienta realiza una auditoría analítica y sintáctica interna conforme al Anexo 22 de las RGCE. <strong>No constituye una aprobación o validación oficial</strong> del Servicio de Administración Tributaria (SAT) ni de la Agencia Nacional de Aduanas de México (ANAM). Toda declaración formal de impuestos de comercio exterior debe ser promovida y firmada por su Agente Aduanal con patente autorizada.
+        </div>
+      </div>
+
+      {/* Upload notice if active */}
+      {uploadNotice && (
+        <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+          isDark ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-300' : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+        }`}>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4" />
+            <span>{uploadNotice}</span>
+          </div>
+          <button
+            onClick={() => setUploadNotice(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Banner & Scenario Selector */}
       <div className={`p-6 rounded-2xl border ${
         isDark ? 'border-slate-800 bg-slate-900/60' : 'border-slate-200 bg-white'
@@ -94,7 +156,7 @@ export const PedimentoAuditor: React.FC<PedimentoAuditorProps> = ({ isDark }) =>
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
               <FileCheck2 className="h-4 w-4" />
-              <span>Auditor Normativo de Pedimentos Aduanales (SAT / ANAM)</span>
+              <span>Auditor Normativo Preventivo (Anexo 22 RGCE)</span>
             </div>
             <h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
               Validación Sintáctica, Incrementables & Detección de Riesgos Fiscales
@@ -104,29 +166,50 @@ export const PedimentoAuditor: React.FC<PedimentoAuditorProps> = ({ isDark }) =>
             </p>
           </div>
 
-          {/* Preset Buttons */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-slate-500 mr-1">Casos de Estudio:</span>
-            {SAMPLE_PEDIMENTOS.map((sample, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSelectPreset(idx)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
-                  selectedPresetIndex === idx
-                    ? isDark
-                      ? 'border-amber-500 bg-amber-500/20 text-amber-300 font-semibold shadow-xs'
-                      : 'border-amber-500 bg-amber-50 text-amber-900 font-semibold shadow-xs'
-                    : isDark
-                    ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
-                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                {idx === 0 && '✓ A1 Conforme (Electrónicos)'}
-                {idx === 1 && '⚠️ Riesgo EXW sin Flete'}
-                {idx === 2 && '✕ Error Estructura 14 Dígitos'}
-              </button>
-            ))}
+            {/* Upload PDF / Document Button */}
+            <button
+              onClick={() => setShowFileModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 transition-colors shadow-xs"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>Cargar Archivo / Texto Pedimento</span>
+            </button>
+
+            <button
+              onClick={() => window.print()}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                isDark ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700' : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Imprimir Dictamen</span>
+            </button>
           </div>
+        </div>
+
+        {/* Preset Buttons */}
+        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-slate-500 mr-1">Casos de Estudio:</span>
+          {SAMPLE_PEDIMENTOS.map((sample, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleSelectPreset(idx)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                selectedPresetIndex === idx
+                  ? isDark
+                    ? 'border-amber-500 bg-amber-500/20 text-amber-300 font-semibold shadow-xs'
+                    : 'border-amber-500 bg-amber-50 text-amber-900 font-semibold shadow-xs'
+                  : isDark
+                  ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              {idx === 0 && '✓ A1 Conforme (Electrónicos)'}
+              {idx === 1 && '⚠️ Riesgo EXW sin Flete'}
+              {idx === 2 && '✕ Error Estructura 14 Dígitos'}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -612,6 +695,89 @@ export const PedimentoAuditor: React.FC<PedimentoAuditorProps> = ({ isDark }) =>
           </div>
         </div>
       </div>
+
+      {/* Modal Cargar Archivo / Texto Pedimento */}
+      {showFileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className={`w-full max-w-lg p-6 rounded-2xl border shadow-2xl ${
+            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
+                <Upload className="h-5 w-5 text-amber-500" />
+                <span>Cargar Pedimento para Auditoría Automática</span>
+              </div>
+              <button
+                onClick={() => setShowFileModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Sube el archivo de texto/M3 o pega el texto copiado de tu pedimento en PDF. El motor extraerá los 15 dígitos, RFC, claves de aduana e importes para auditarlos al instante.
+            </p>
+
+            {/* Drag & drop file area */}
+            <div className="mt-4">
+              <label className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                isDark ? 'border-slate-700 bg-slate-950/50 hover:border-amber-500/50' : 'border-slate-300 bg-slate-50 hover:border-amber-400'
+              }`}>
+                <FileText className="h-8 w-8 text-amber-500 mb-2" />
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Seleccionar archivo de pedimento (.txt, .m3, .pdf)
+                </span>
+                <span className="text-[10px] text-slate-400 mt-0.5">
+                  Extracción local segura en tu navegador
+                </span>
+                <input
+                  type="file"
+                  accept=".txt,.m3,.csv,.json"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {/* Or Paste text */}
+            <div className="mt-4">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                O pega el texto extraído del documento:
+              </label>
+              <textarea
+                rows={4}
+                value={pastedDocumentText}
+                onChange={e => setPastedDocumentText(e.target.value)}
+                placeholder="Pega aquí el contenido del pedimento, por ejemplo:
+PEDIMENTO: 24 16 3840 4 001928 CLAVE: A1 REGIMEN: IMD
+RFC: DTE210419KM8 T.C.: 19.85 INCOTERM: FOB..."
+                className={`w-full p-2.5 text-xs font-mono rounded-xl border outline-none focus:ring-2 focus:ring-amber-500/50 ${
+                  isDark ? 'border-slate-700 bg-slate-950 text-white placeholder-slate-600' : 'border-slate-300 bg-white text-slate-900 placeholder-slate-400'
+                }`}
+              />
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowFileModal(false)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+                  isDark ? 'border-slate-700 text-slate-300' : 'border-slate-300 text-slate-700'
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleParseText(pastedDocumentText)}
+                disabled={!pastedDocumentText.trim()}
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:opacity-50 transition-colors shadow-xs"
+              >
+                Analizar & Auditar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

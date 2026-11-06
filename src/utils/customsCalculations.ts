@@ -1,181 +1,465 @@
 /**
- * AduanaFlow - Motor de Cálculo Aduanal y Costeo de Importación (Landed Cost)
- * Basado en la Ley Aduanera mexicana, Ley Federal de Derechos y CFF.
+ * AduanaFlow - Motor de Cálculo Aduanal y Costeo Integral de Importación (Landed Cost)
+ * Basado en la Ley Aduanera mexicana (Arts. 64, 65, 66), Ley Federal de Derechos (Art. 49),
+ * Ley del Impuesto al Valor Agregado (Arts. 24 al 28) y Código Fiscal de la Federación.
  */
 
+export type InvoiceCurrency = 'USD' | 'EUR' | 'CNY' | 'MXN';
+
+export type TradeAgreement = 'GENERAL' | 'TMEC' | 'TLCUEM' | 'TIPAT' | 'ALIANZA_PACIFICO' | 'PROSEC' | 'REGLA_8VA';
+
 export interface LandedCostInput {
-  commercialValueUSD: number;
-  exchangeRate: number; // Tipo de cambio DOF (MXN por USD)
-  incoterm: string; // EXW, FOB, CIF, DDP, etc.
-  freightUSD: number;
-  insuranceUSD: number;
-  handlingUSD: number;
-  otherIncrementablesUSD: number;
-  igiRatePercent: number; // Tasa IGI % (0%, 5%, 10%, 15%, 20%, etc.)
-  isDtaFixed?: boolean; // Si aplica cuota fija o 8 al millar
-  dtaFixedAmountMXN?: number; // Cuota fija de DTA para tratados / regímenes especiales
-  prvMXN?: number; // Prevalidación (típicamente $310 - $340 MXN)
-  cntMXN?: number; // Contraprestación ($75 - $90 MXN)
-  unitsCount: number;
-  brokerFeePercent?: number; // Honorarios de agente aduanal % (ej. 0.45%)
-  brokerMinFeeMXN?: number;
-  lastMileDeliveryMXN?: number; // Flete terrestre nacional hasta la PyME
-  targetMarginPercent?: number; // Margen de ganancia comercial deseado %
+  // Factura y divisas
+  invoiceValue?: number;
+  currency?: InvoiceCurrency;
+  exchangeRateToMXN?: number; // Tipo de cambio oficial DOF a MXN
+  exchangeRateToUSD?: number; // Para convertir moneda a USD si no es USD
+  originCountry?: string;
+  provenanceCountry?: string;
+
+  // Clasificación arancelaria e Incoterm
+  hsCode?: string;
+  nico?: string;
+  incoterm?: string; // EXW, FOB, CIF, DDP, etc.
+  tradeAgreement?: TradeAgreement;
+
+  // Incrementables (Art. 65 Ley Aduanera)
+  freightUSD?: number;
+  insuranceUSD?: number;
+  packagingUSD?: number;
+  handlingUSD?: number;
+  otherIncrementablesUSD?: number;
+
+  // Gravámenes y derechos
+  igiRatePercent?: number; // Tasa IGI general o preferencial %
+  isDtaFixed?: boolean; // Cuota fija o 8 al millar
+  dtaFixedAmountMXN?: number; // Cuota fija Art. 49 LFD
+  compensatoryDutyPercent?: number; // Cuota compensatoria %
+  prvMXN?: number; // Prevalidación (Anexo 22 / RGCE)
+  cntMXN?: number; // Contraprestación
+
+  // Logística y gestión aduanal
+  unitsCount?: number;
+  brokerFeePercent?: number; // Honorarios Agente Aduanal %
+  brokerMinFeeMXN?: number; // Mínimo de honorarios
+  storagePortMXN?: number; // Almacenaje en puerto o aeropuerto
+  maneuversPortMXN?: number; // Maniobras portuarias / desconsolidación
+  lastMileDeliveryMXN?: number; // Flete terrestre nacional a bodega de la PyME
+  targetMarginPercent?: number; // Margen comercial deseado sobre costo %
+
+  // Parámetros de compatibilidad previos
+  commercialValueUSD?: number;
+  exchangeRate?: number;
+}
+
+export interface CalculationLineDetail {
+  concept: string;
+  amountMXN: number;
+  amountUSD: number;
+  formula: string;
+  legalBasis: string;
+  warningNote?: string;
+  isCreditableTax?: boolean;
 }
 
 export interface LandedCostResult {
+  // Valores comerciales y aduana
+  currency: InvoiceCurrency;
+  commercialValueOriginal: number;
   commercialValueUSD: number;
   commercialValueMXN: number;
   incrementablesUSD: number;
   incrementablesMXN: number;
-  customsValueUSD: number; // Valor Aduana en USD
-  customsValueMXN: number; // Base gravable para IGI y DTA
-  igiAmountMXN: number; // Impuesto General de Importación
-  dtaAmountMXN: number; // Derecho de Trámite Aduanero (Art. 49 LFD)
-  prvAmountMXN: number; // Prevalidación
-  cntAmountMXN: number; // Contraprestación
-  ivaBaseMXN: number; // Base gravable de IVA = Valor Aduana + IGI + DTA
-  ivaAmountMXN: number; // IVA 16%
-  totalCustomsTaxesMXN: number; // Suma de impuestos y derechos aduanales
-  brokerFeeMXN: number; // Honorarios de agente aduanal
-  lastMileDeliveryMXN: number; // Flete última milla
-  totalLandedCostMXN: number; // Costo total puesto en puerta de la PyME
-  costPerUnitMXN: number;
+  customsValueUSD: number;
+  customsValueMXN: number; // Base gravable Art. 64 Ley Aduanera
+
+  // Contribuciones y derechos
+  igiRateAppliedPercent: number;
+  igiAmountMXN: number;
+  dtaAmountMXN: number;
+  compensatoryDutyMXN: number;
+  prvAmountMXN: number;
+  cntAmountMXN: number;
+  ivaBaseMXN: number;
+  ivaAmountMXN: number; // 16% sobre base
+  totalCustomsTaxesMXN: number; // Suma pagada en pedimento (PE)
+
+  // Gastos de despacho y logística
+  brokerFeeMXN: number;
+  brokerFeeIvaMXN: number;
+  storagePortMXN: number;
+  maneuversPortMXN: number;
+  lastMileDeliveryMXN: number;
+
+  // Reglas contables clave (Desembolso vs Costo de Adquisición)
+  cashDisbursementTotalMXN: number; // Flujo de caja total necesario
+  creditableIvaTotalMXN: number; // IVA acreditable ante el SAT (no es costo de producto)
+  accountingInventoryCostMXN: number; // Costo contable neto del inventario en balance
+  
+  // Costos unitarios y precio de venta
+  unitsCount: number;
+  costPerUnitMXN: number; // Costo unitario neto contable
   costPerUnitUSD: number;
-  suggestedSalePriceMXN: number;
+  disbursementPerUnitMXN: number; // Desembolso unitario de flujo
+  suggestedSalePriceMXN: number; // Precio de venta antes de IVA sugerido
   suggestedMarginAmountMXN: number;
-  taxRatioPercent: number; // % que representan los impuestos del valor comercial
+  taxRatioPercent: number;
+
+  // Desglose técnico y legal detallado por concepto
+  breakdown: CalculationLineDetail[];
 }
 
 /**
- * Determina si el Incoterm requiere que el flete y seguro se sumen como incrementables
- * a la factura comercial para determinar el Valor en Aduana.
- * Según Art. 65 de la Ley Aduanera:
- * - EXW, FCA, FAS, FOB: El comprador paga flete y seguro internacional -> SÍ son incrementables.
- * - CFR, CPT: Incluyen flete en la factura, el seguro se incrementa.
- * - CIF, CIP, DAP, DPU, DDP: El precio pagado ya incluye flete y seguro (o parte de ellos).
+ * Tasas y beneficios arancelarios por Tratado Comercial
+ */
+export const TRADE_AGREEMENTS_INFO: Record<TradeAgreement, {
+  name: string;
+  description: string;
+  igiExemptionDefault: boolean;
+  dtaType: 'FIXED' | 'MILLAR';
+  fixedDtaAmount: number;
+  legalReference: string;
+}> = {
+  GENERAL: {
+    name: 'Tasa General LIGIE (Sin Tratado)',
+    description: 'Arancel general de importación según fracción arancelaria y DTA al 8 al millar.',
+    igiExemptionDefault: false,
+    dtaType: 'MILLAR',
+    fixedDtaAmount: 434,
+    legalReference: 'Art. 1 LIGIE y Art. 49 Fracc. I Ley Federal de Derechos.',
+  },
+  TMEC: {
+    name: 'T-MEC (EE.UU. / Canadá)',
+    description: 'Arancel preferencial 0% en bienes originarios calificados y exención del 8 al millar de DTA (aplica cuota fija).',
+    igiExemptionDefault: true,
+    dtaType: 'FIXED',
+    fixedDtaAmount: 434,
+    legalReference: 'Tratado entre México, EE.UU. y Canadá; Regla 5.1.4 de las RGCE.',
+  },
+  TLCUEM: {
+    name: 'TLCUEM (Unión Europea)',
+    description: 'Tratado de Libre Comercio con la Unión Europea. Requiere certificado EUR.1 o declaración en factura con exportador autorizado.',
+    igiExemptionDefault: true,
+    dtaType: 'MILLAR',
+    fixedDtaAmount: 434,
+    legalReference: 'Acuerdo de Asociación Económica México - UE.',
+  },
+  TIPAT: {
+    name: 'TIPAT / CPTPP (Asia-Pacífico)',
+    description: 'Tratado Integral y Progresista de Asociación Transpacífico (Japón, Vietnam, Australia, Singapur, etc.).',
+    igiExemptionDefault: true,
+    dtaType: 'MILLAR',
+    fixedDtaAmount: 434,
+    legalReference: 'Capítulo de Comercio de Mercancías del TIPAT.',
+  },
+  ALIANZA_PACIFICO: {
+    name: 'Alianza del Pacífico (Chile, Colombia, Perú)',
+    description: 'Desgravación arancelaria para el 92% de las fracciones arancelarias intrarregionales.',
+    igiExemptionDefault: true,
+    dtaType: 'MILLAR',
+    fixedDtaAmount: 434,
+    legalReference: 'Protocolo Adicional al Acuerdo Marco de la Alianza del Pacífico.',
+  },
+  PROSEC: {
+    name: 'PROSEC (Programa de Promoción Sectorial)',
+    description: 'Arancel preferencial del 0% al 5% para empresas con programa PROSEC autorizado por Secretaría de Economía.',
+    igiExemptionDefault: true,
+    dtaType: 'MILLAR',
+    fixedDtaAmount: 434,
+    legalReference: 'Decreto PROSEC publicado en el DOF.',
+  },
+  REGLA_8VA: {
+    name: 'Regla 8va (Fracción Arancelaria 9802)',
+    description: 'Permiso previo de la Secretaría de Economía para importar insumos o maquinaria no producida en México al 0%.',
+    igiExemptionDefault: true,
+    dtaType: 'FIXED',
+    fixedDtaAmount: 434,
+    legalReference: 'Regla Complementaria 8ª de la LIGIE.',
+  },
+};
+
+/**
+ * Determina incrementables conforme al Art. 65 de la Ley Aduanera según el Incoterm 2020.
  */
 export function calculateIncrementablesUSD(
   incoterm: string,
   freightUSD: number,
   insuranceUSD: number,
-  handlingUSD: number,
-  otherIncrementablesUSD: number
+  param4?: number,
+  param5?: number,
+  param6?: number
 ): number {
-  const normInco = incoterm.toUpperCase().trim();
-  const baseOther = (handlingUSD || 0) + (otherIncrementablesUSD || 0);
+  const normInco = (incoterm || 'FOB').toUpperCase().trim();
+  let directIncrementables = 0;
+  if (param6 !== undefined) {
+    // 6 params: (incoterm, freight, insurance, packaging, handling, other)
+    directIncrementables = (param4 || 0) + (param5 || 0) + (param6 || 0);
+  } else {
+    // 4 or 5 params: (incoterm, freight, insurance, handling, other)
+    directIncrementables = (param4 || 0) + (param5 || 0);
+  }
 
+  // EXW, FCA, FAS, FOB: El flete internacional y seguro NO están en factura comercial -> OBLIGATORIO incrementarlos
   if (['EXW', 'FCA', 'FAS', 'FOB'].includes(normInco)) {
-    return (freightUSD || 0) + (insuranceUSD || 0) + baseOther;
+    return (freightUSD || 0) + (insuranceUSD || 0) + directIncrementables;
   }
+  // CFR, CPT: El flete ya viene en factura, el seguro y maniobras se incrementan
   if (['CFR', 'CPT'].includes(normInco)) {
-    // Flete ya en factura, se suma seguro y otros
-    return (insuranceUSD || 0) + baseOther;
+    return (insuranceUSD || 0) + directIncrementables;
   }
-  // CIF, CIP, DAP, DPU, DDP: Flete y seguro ya pactados en precio de factura
-  return baseOther;
+  // CIF, CIP, DAP, DPU, DDP: Flete y seguro ya pactados en precio pagado
+  return directIncrementables;
 }
 
 /**
- * Realiza el cálculo exhaustivo de costos de importación y despacho aduanal mexicano.
+ * Realiza el cálculo riguroso del Landed Cost, separando desembolso financiero y costo contable.
  */
 export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
-  const commercialValueUSD = Math.max(0, input.commercialValueUSD || 0);
-  const exchangeRate = Math.max(0.001, input.exchangeRate || 1);
-  const unitsCount = Math.max(1, input.unitsCount || 1);
+  const currency: InvoiceCurrency = input.currency || 'USD';
+  const exchangeRateToMXN = Math.max(0.0001, input.exchangeRateToMXN || input.exchangeRate || 19.85);
+  
+  // Normalización de valor comercial a USD y MXN
+  let commercialValueUSD = 0;
+  let commercialValueMXN = 0;
+  const invoiceValue = Math.max(0, input.invoiceValue ?? input.commercialValueUSD ?? 0);
 
-  const incrementablesUSD = calculateIncrementablesUSD(
-    input.incoterm || 'FOB',
-    input.freightUSD || 0,
-    input.insuranceUSD || 0,
-    input.handlingUSD || 0,
-    input.otherIncrementablesUSD || 0
-  );
-
-  const customsValueUSD = commercialValueUSD + incrementablesUSD;
-  const commercialValueMXN = Math.round(commercialValueUSD * exchangeRate * 100) / 100;
-  const incrementablesMXN = Math.round(incrementablesUSD * exchangeRate * 100) / 100;
-  const customsValueMXN = Math.round(customsValueUSD * exchangeRate * 100) / 100;
-
-  // IGI (Impuesto General de Importación)
-  const igiRate = (input.igiRatePercent || 0) / 100;
-  const igiAmountMXN = Math.round(customsValueMXN * igiRate);
-
-  // DTA (Derecho de Trámite Aduanero) - Art. 49 LFD
-  let dtaAmountMXN = 0;
-  if (input.isDtaFixed) {
-    dtaAmountMXN = input.dtaFixedAmountMXN ?? 415;
-  } else {
-    // 8 al millar (0.008) sobre valor aduana, con cuota mínima legal
-    const calculatedDTA = Math.round(customsValueMXN * 0.008);
-    dtaAmountMXN = Math.max(415, calculatedDTA);
+  if (currency === 'USD') {
+    commercialValueUSD = invoiceValue;
+    commercialValueMXN = Math.round(commercialValueUSD * exchangeRateToMXN * 100) / 100;
+  } else if (currency === 'MXN') {
+    commercialValueMXN = invoiceValue;
+    commercialValueUSD = Math.round((commercialValueMXN / exchangeRateToMXN) * 100) / 100;
+  } else if (currency === 'EUR') {
+    const eurRateToUSD = input.exchangeRateToUSD || 1.08;
+    commercialValueUSD = Math.round(invoiceValue * eurRateToUSD * 100) / 100;
+    commercialValueMXN = Math.round(commercialValueUSD * exchangeRateToMXN * 100) / 100;
+  } else if (currency === 'CNY') {
+    const cnyRateToUSD = input.exchangeRateToUSD || 0.14;
+    commercialValueUSD = Math.round(invoiceValue * cnyRateToUSD * 100) / 100;
+    commercialValueMXN = Math.round(commercialValueUSD * exchangeRateToMXN * 100) / 100;
   }
 
-  // Prevalidación y Contraprestación
+  const unitsCount = Math.max(1, input.unitsCount || 1);
+  const incoterm = (input.incoterm || 'FOB').toUpperCase().trim();
+  const agreement = input.tradeAgreement || 'GENERAL';
+  const agreementMeta = TRADE_AGREEMENTS_INFO[agreement] || TRADE_AGREEMENTS_INFO.GENERAL;
+
+  // Incrementables
+  const packagingUSD = input.packagingUSD || 0;
+  const handlingUSD = input.handlingUSD || 0;
+  const otherIncUSD = input.otherIncrementablesUSD || 0;
+  const freightUSD = input.freightUSD || 0;
+  const insuranceUSD = input.insuranceUSD || 0;
+
+  const incrementablesUSD = calculateIncrementablesUSD(
+    incoterm,
+    freightUSD,
+    insuranceUSD,
+    packagingUSD,
+    handlingUSD,
+    otherIncUSD
+  );
+  const incrementablesMXN = Math.round(incrementablesUSD * exchangeRateToMXN * 100) / 100;
+
+  // Valor en Aduana (Base gravable IGI y DTA) - Art. 64 Ley Aduanera
+  const customsValueUSD = Math.round((commercialValueUSD + incrementablesUSD) * 100) / 100;
+  const customsValueMXN = Math.round(customsValueUSD * exchangeRateToMXN);
+
+  // 1. IGI (Impuesto General de Importación)
+  let igiRateAppliedPercent = input.igiRatePercent || 0;
+  if (agreement !== 'GENERAL' && agreementMeta.igiExemptionDefault && input.igiRatePercent === undefined) {
+    igiRateAppliedPercent = 0;
+  }
+  const igiAmountMXN = Math.round(customsValueMXN * (igiRateAppliedPercent / 100));
+
+  // 2. DTA (Derecho de Trámite Aduanero) - Art. 49 LFD
+  let dtaAmountMXN = 0;
+  const isDtaFixed = input.isDtaFixed ?? (agreementMeta.dtaType === 'FIXED');
+  if (isDtaFixed) {
+    dtaAmountMXN = input.dtaFixedAmountMXN ?? agreementMeta.fixedDtaAmount;
+  } else {
+    // 8 al millar sobre valor aduana con cuota mínima legal ($434 MXN vigente)
+    const dtaMillar = Math.round(customsValueMXN * 0.008);
+    dtaAmountMXN = Math.max(434, dtaMillar);
+  }
+
+  // 3. Cuotas Compensatorias
+  const compensatoryRate = (input.compensatoryDutyPercent || 0) / 100;
+  const compensatoryDutyMXN = Math.round(customsValueMXN * compensatoryRate);
+
+  // 4. Prevalidación (PRV) y Contraprestación (CNT)
   const prvAmountMXN = input.prvMXN ?? 310;
   const cntAmountMXN = input.cntMXN ?? 80;
 
-  // Base gravable IVA = Valor Aduana + IGI + DTA
-  const ivaBaseMXN = customsValueMXN + igiAmountMXN + dtaAmountMXN;
+  // 5. IVA de Importación - Art. 27 Ley del IVA
+  // Base gravable de IVA = Valor en Aduana + IGI + DTA + Cuotas compensatorias
+  const ivaBaseMXN = customsValueMXN + igiAmountMXN + dtaAmountMXN + compensatoryDutyMXN;
   const ivaAmountMXN = Math.round(ivaBaseMXN * 0.16);
 
-  // Total contribuciones aduaneras
-  const totalCustomsTaxesMXN = igiAmountMXN + dtaAmountMXN + prvAmountMXN + cntAmountMXN + ivaAmountMXN;
+  // Total contribuciones pagadas en pedimento
+  const totalCustomsTaxesMXN = igiAmountMXN + dtaAmountMXN + compensatoryDutyMXN + prvAmountMXN + cntAmountMXN + ivaAmountMXN;
 
-  // Honorarios Agente Aduanal (ej. 0.45% de valor aduana o mínimo de $4,500 MXN)
+  // 6. Honorarios del Agente Aduanal (con su IVA 16% respectivo)
   const brokerRate = (input.brokerFeePercent ?? 0.45) / 100;
   const minBroker = input.brokerMinFeeMXN ?? 4200;
-  const brokerFeeMXN = Math.round(Math.max(minBroker, customsValueMXN * brokerRate));
+  const brokerFeeSubtotalMXN = Math.round(Math.max(minBroker, customsValueMXN * brokerRate));
+  const brokerFeeIvaMXN = Math.round(brokerFeeSubtotalMXN * 0.16);
+  const brokerFeeTotalMXN = brokerFeeSubtotalMXN + brokerFeeIvaMXN;
 
-  // Flete de última milla a bodega de la PyME
-  const lastMileDeliveryMXN = Math.round(input.lastMileDeliveryMXN ?? 3800);
+  // 7. Almacenaje, maniobras y transporte nacional (última milla)
+  const storagePortMXN = Math.round(input.storagePortMXN ?? 1800);
+  const maneuversPortMXN = Math.round(input.maneuversPortMXN ?? 1500);
+  const lastMileDeliveryMXN = Math.round(input.lastMileDeliveryMXN ?? 4200);
 
-  // Costo total de adquisición y logística (Landed Cost)
-  // Incluye: Factura comercial en MXN + Incrementables (si se pagan aparte) + Impuestos + Agente Aduanal + Última milla
-  const totalLandedCostMXN = Math.round(
+  // Desembolso de flete y seguro internacional pagado por fuera (si no venía en la factura comercial)
+  const externalFreightInsuranceMXN = ['EXW', 'FCA', 'FAS', 'FOB'].includes(incoterm)
+    ? incrementablesMXN
+    : 0;
+
+  // TOTAL DESEMBOLSO DE EFECTIVO (Flujo de tesorería requerido)
+  const cashDisbursementTotalMXN = Math.round(
     commercialValueMXN +
-    (['EXW', 'FCA', 'FAS', 'FOB'].includes(input.incoterm?.toUpperCase() || '') ? incrementablesMXN : 0) +
+    externalFreightInsuranceMXN +
     totalCustomsTaxesMXN +
-    brokerFeeMXN +
+    brokerFeeTotalMXN +
+    storagePortMXN +
+    maneuversPortMXN +
     lastMileDeliveryMXN
   );
 
-  const costPerUnitMXN = Math.round((totalLandedCostMXN / unitsCount) * 100) / 100;
-  const costPerUnitUSD = Math.round((costPerUnitMXN / exchangeRate) * 100) / 100;
+  // TOTAL IVA ACREDITABLE ANTE EL SAT (IVA del pedimento + IVA de honorarios)
+  // Conforme a los Artículos 1, 4 y 5 de la Ley del IVA, este monto se acredita contra el IVA cobrado
+  const creditableIvaTotalMXN = ivaAmountMXN + brokerFeeIvaMXN;
 
-  const targetMargin = (input.targetMarginPercent ?? 35) / 100;
-  // Precio de venta = Costo / (1 - margen)
-  const suggestedSalePriceMXN = targetMargin < 1 
-    ? Math.round((costPerUnitMXN / (1 - targetMargin)) * 100) / 100 
-    : costPerUnitMXN * 1.5;
+  // COSTO NETO CONTABLE DE ADQUISICIÓN DEL INVENTARIO (Sin IVA acreditable)
+  // Este es el costo real que entra al balance general y con el que se fija el precio de venta
+  const accountingInventoryCostMXN = Math.round(cashDisbursementTotalMXN - creditableIvaTotalMXN);
+
+  const costPerUnitMXN = Math.round((accountingInventoryCostMXN / unitsCount) * 100) / 100;
+  const costPerUnitUSD = Math.round((costPerUnitMXN / exchangeRateToMXN) * 100) / 100;
+  const disbursementPerUnitMXN = Math.round((cashDisbursementTotalMXN / unitsCount) * 100) / 100;
+
+  // Margen comercial y precio de venta sugerido
+  const targetMargin = Math.min(0.95, Math.max(0.05, (input.targetMarginPercent ?? 35) / 100));
+  // Precio de venta sugerido (antes de IVA de venta al consumidor final) = Costo / (1 - Margen)
+  const suggestedSalePriceMXN = Math.round((costPerUnitMXN / (1 - targetMargin)) * 100) / 100;
   const suggestedMarginAmountMXN = Math.round((suggestedSalePriceMXN - costPerUnitMXN) * 100) / 100;
 
   const taxRatioPercent = commercialValueMXN > 0
     ? Math.round((totalCustomsTaxesMXN / commercialValueMXN) * 1000) / 10
     : 0;
 
+  // Desglose técnico de fórmulas y fundamentos legales
+  const breakdown: CalculationLineDetail[] = [
+    {
+      concept: 'Valor Comercial de la Mercancía',
+      amountMXN: commercialValueMXN,
+      amountUSD: commercialValueUSD,
+      formula: `Factura ${currency} (${invoiceValue.toLocaleString()}) * TC DOF ($${exchangeRateToMXN.toFixed(4)})`,
+      legalBasis: 'Art. 64 de la Ley Aduanera (Precio pagado o por pagar)',
+    },
+    {
+      concept: `Incrementables (${incoterm})`,
+      amountMXN: incrementablesMXN,
+      amountUSD: incrementablesUSD,
+      formula: ['EXW', 'FCA', 'FOB'].includes(incoterm)
+        ? `Flete ($${freightUSD}) + Seguro ($${insuranceUSD}) + Maniobras/Embalaje ($${handlingUSD + packagingUSD})`
+        : `Maniobras y gastos conexos en origen ($${handlingUSD + packagingUSD})`,
+      legalBasis: 'Art. 65 Fracc. I de la Ley Aduanera (Gastos a cargo del importador no incluidos en factura)',
+      warningNote: ['EXW', 'FOB'].includes(incoterm) && incrementablesUSD === 0
+        ? 'Alerta: Si el Incoterm es FOB o EXW y no se declaran fletes/seguros, la autoridad tipifica subvaluación.'
+        : undefined,
+    },
+    {
+      concept: 'Valor en Aduana (Base Gravable)',
+      amountMXN: customsValueMXN,
+      amountUSD: customsValueUSD,
+      formula: `Valor Comercial ($${commercialValueUSD.toLocaleString()} USD) + Incrementables ($${incrementablesUSD.toLocaleString()} USD) * TC`,
+      legalBasis: 'Art. 64 y 65 de la Ley Aduanera (Base del IGI y DTA)',
+    },
+    {
+      concept: `IGI (Impuesto General de Importación: ${igiRateAppliedPercent}%)`,
+      amountMXN: igiAmountMXN,
+      amountUSD: Math.round((igiAmountMXN / exchangeRateToMXN) * 100) / 100,
+      formula: `Valor en Aduana ($${customsValueMXN.toLocaleString()} MXN) * ${igiRateAppliedPercent}%`,
+      legalBasis: `${agreementMeta.legalReference} Tratado: ${agreementMeta.name}`,
+    },
+    {
+      concept: `DTA (Derecho de Trámite Aduanero: ${isDtaFixed ? 'Cuota Fija' : '8 al millar'})`,
+      amountMXN: dtaAmountMXN,
+      amountUSD: Math.round((dtaAmountMXN / exchangeRateToMXN) * 100) / 100,
+      formula: isDtaFixed
+        ? `Cuota fija conforme al tratado o régimen especial: $${dtaAmountMXN} MXN`
+        : `Max($434 cuota mínima legal, Valor en Aduana * 0.008) = $${dtaAmountMXN.toLocaleString()} MXN`,
+      legalBasis: 'Art. 49 de la Ley Federal de Derechos (LFD)',
+    },
+    {
+      concept: 'IVA de Importación (16%)',
+      amountMXN: ivaAmountMXN,
+      amountUSD: Math.round((ivaAmountMXN / exchangeRateToMXN) * 100) / 100,
+      formula: `[Valor en Aduana ($${customsValueMXN.toLocaleString()}) + IGI ($${igiAmountMXN.toLocaleString()}) + DTA ($${dtaAmountMXN.toLocaleString()})] * 16%`,
+      legalBasis: 'Art. 24 y 27 de la Ley del IVA (Base gravable integrada)',
+      warningNote: 'Impuesto 100% acreditable fiscalmente en la declaración mensual del SAT. No constituye costo de venta.',
+      isCreditableTax: true,
+    },
+    {
+      concept: 'Prevalidación (PRV) y Contraprestación (CNT)',
+      amountMXN: prvAmountMXN + cntAmountMXN,
+      amountUSD: Math.round(((prvAmountMXN + cntAmountMXN) / exchangeRateToMXN) * 100) / 100,
+      formula: `Prevalidación ($${prvAmountMXN} MXN) + Contraprestación ($${cntAmountMXN} MXN)`,
+      legalBasis: 'Art. 16-A y 16-B de la Ley Aduanera y Regla 1.8.2 de las RGCE',
+    },
+    {
+      concept: 'Honorarios Agente Aduanal + IVA',
+      amountMXN: brokerFeeTotalMXN,
+      amountUSD: Math.round((brokerFeeTotalMXN / exchangeRateToMXN) * 100) / 100,
+      formula: `Honorarios ($${brokerFeeSubtotalMXN.toLocaleString()} MXN) + IVA 16% ($${brokerFeeIvaMXN.toLocaleString()} MXN)`,
+      legalBasis: 'Art. 160 de la Ley Aduanera y arancel privado de servicios aduanales',
+      isCreditableTax: false,
+    },
+    {
+      concept: 'Almacenajes, Maniobras y Flete Última Milla',
+      amountMXN: storagePortMXN + maneuversPortMXN + lastMileDeliveryMXN,
+      amountUSD: Math.round(((storagePortMXN + maneuversPortMXN + lastMileDeliveryMXN) / exchangeRateToMXN) * 100) / 100,
+      formula: `Almacenaje ($${storagePortMXN}) + Maniobras ($${maneuversPortMXN}) + Transporte Terrestre ($${lastMileDeliveryMXN})`,
+      legalBasis: 'Contratos logísticos y maniobras portuarias en recinto fiscalizado',
+    },
+  ];
+
   return {
+    currency,
+    commercialValueOriginal: invoiceValue,
     commercialValueUSD,
     commercialValueMXN,
     incrementablesUSD,
     incrementablesMXN,
     customsValueUSD,
     customsValueMXN,
+    igiRateAppliedPercent,
     igiAmountMXN,
     dtaAmountMXN,
+    compensatoryDutyMXN,
     prvAmountMXN,
     cntAmountMXN,
     ivaBaseMXN,
     ivaAmountMXN,
     totalCustomsTaxesMXN,
-    brokerFeeMXN,
+    brokerFeeMXN: brokerFeeSubtotalMXN,
+    brokerFeeIvaMXN,
+    storagePortMXN,
+    maneuversPortMXN,
     lastMileDeliveryMXN,
-    totalLandedCostMXN,
+    cashDisbursementTotalMXN,
+    creditableIvaTotalMXN,
+    accountingInventoryCostMXN,
+    unitsCount,
     costPerUnitMXN,
     costPerUnitUSD,
+    disbursementPerUnitMXN,
     suggestedSalePriceMXN,
     suggestedMarginAmountMXN,
     taxRatioPercent,
+    breakdown,
   };
 }
 
@@ -192,7 +476,7 @@ export const COMMON_TARIFFS: TariffCategory[] = [
   {
     hsCode: '8471.30.01',
     nico: '00',
-    description: 'Máquinas automáticas para tratamiento o procesamiento de datos, portátiles (Laptops/Notebooks)',
+    description: 'Máquinas automáticas para tratamiento de datos, portátiles (Laptops/Notebooks)',
     igiPercent: 0,
     unit: 'Pieza',
     regulations: ['NOM-001-SCFI-2018 (Seguridad electrónica)', 'NOM-019-SCFI-1998 (Equipo periférico)', 'NOM-024-SCFI-2013 (Garantías)'],

@@ -180,8 +180,10 @@ export function auditPedimento(data: PedimentoData): PedimentoAuditReport {
     }
   }
 
-  // 2. Validación de Clave de Pedimento
+  // 2. Validación de Clave de Pedimento y Régimen Aduanero
   const claveNorm = data.clavePedimento?.toUpperCase().trim();
+  const regimenNorm = data.regimenAduanero?.toUpperCase().trim();
+
   if (!claveNorm || !VALID_CLAVES_PEDIMENTO[claveNorm]) {
     issues.push({
       field: 'clavePedimento',
@@ -190,6 +192,27 @@ export function auditPedimento(data: PedimentoData): PedimentoAuditReport {
       message: `La clave "${data.clavePedimento}" no es una clave válida del Apéndice 2 del Anexo 22.`,
       legalReference: 'Anexo 22 RGCE, Apéndice 2.',
       suggestedAction: 'Seleccione una clave válida como A1 (Definitivo), IN (IMMEX) o V1.',
+    });
+  }
+
+  // Verificación de compatibilidad entre Clave y Régimen Aduanero
+  if (claveNorm === 'A1' && regimenNorm !== 'IMD' && regimenNorm !== 'EXD') {
+    issues.push({
+      field: 'regimenAduanero',
+      severity: 'CRITICAL',
+      title: 'Incompatibilidad entre Clave A1 y Régimen Aduanero',
+      message: `La clave A1 ampara importación/exportación definitiva y debe declararse bajo régimen IMD (Importación Definitiva) o EXD, pero se declaró "${regimenNorm}".`,
+      legalReference: 'Anexo 22 RGCE, Apéndice 2 y 16.',
+      suggestedAction: 'Ajuste el régimen aduanero a IMD para importaciones definitivas comerciales.',
+    });
+  } else if ((claveNorm === 'IN' || claveNorm === 'AF') && regimenNorm !== 'ITR') {
+    issues.push({
+      field: 'regimenAduanero',
+      severity: 'CRITICAL',
+      title: 'Clave IMMEX incompatible con régimen aduanero',
+      message: `Las claves IN (Insumos) y AF (Activo Fijo) exigen régimen ITR (Importación Temporal para Elaboración/Transformación), pero se declaró "${regimenNorm}".`,
+      legalReference: 'Anexo 22 RGCE y Decreto IMMEX.',
+      suggestedAction: 'Corrija el régimen aduanero a ITR o la clave a A1 si es definitiva.',
     });
   }
 
@@ -439,3 +462,62 @@ export const SAMPLE_PEDIMENTOS: { name: string; description: string; data: Pedim
     },
   },
 ];
+
+/**
+ * Analizador / extractor de campos de pedimento a partir de texto plano o archivo extraído (PDF / TXT)
+ */
+export function parsePedimentoDocumentText(text: string): Partial<PedimentoData> {
+  const result: Partial<PedimentoData> = {};
+
+  // Buscar número de pedimento de 15 dígitos con o sin espacios
+  const numMatch = text.match(/\b(\d{2})[\s-]?(\d{2})[\s-]?(\d{4})[\s-]?(\d{1})[\s-]?(\d{6})\b/);
+  if (numMatch) {
+    result.numeroPedimento = `${numMatch[1]} ${numMatch[2]} ${numMatch[3]} ${numMatch[4]} ${numMatch[5]}`;
+    result.aduanaDespacho = `${numMatch[2]}0`;
+    result.patenteAgente = numMatch[3];
+  }
+
+  // Buscar RFC
+  const rfcMatch = text.match(/\b([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})\b/i);
+  if (rfcMatch) {
+    result.rfcImportador = rfcMatch[1].toUpperCase();
+  }
+
+  // Buscar Clave de Pedimento
+  const claveMatch = text.match(/\b(CLAVE|CVE)[\s.:]+(A1|IN|AF|V1|K1|G1|F4|R1|RT)\b/i) || text.match(/\b(A1|IN|AF|V1|K1)\b/);
+  if (claveMatch) {
+    result.clavePedimento = (claveMatch[2] || claveMatch[1]).toUpperCase();
+  }
+
+  // Buscar Régimen Aduanero
+  const regMatch = text.match(/\b(REGIMEN|REG)[\s.:]+(IMD|EXD|ITR|ETR|DFI|TRA|RFE)\b/i) || text.match(/\b(IMD|ITR|DFI)\b/);
+  if (regMatch) {
+    result.regimenAduanero = (regMatch[2] || regMatch[1]).toUpperCase();
+  }
+
+  // Buscar Incoterm
+  const incoMatch = text.match(/\b(FOB|EXW|CIF|CIP|FCA|CPT|CFR|DAP|DPU|DDP|FAS)\b/i);
+  if (incoMatch) {
+    result.incoterm = incoMatch[1].toUpperCase();
+  }
+
+  // Buscar Tipo de Cambio
+  const tcMatch = text.match(/(?:T\.?C\.?|TIPO DE CAMBIO)[\s.:$]*(\d{1,2}\.\d{2,5})/i);
+  if (tcMatch) {
+    result.tipoCambio = parseFloat(tcMatch[1]);
+  }
+
+  // Buscar Fracción Arancelaria (8 dígitos)
+  const fraccionMatch = text.match(/\b(\d{4}\.?\d{2}\.?\d{2})\b/) || text.match(/\b(\d{8})\b/);
+  if (fraccionMatch) {
+    result.fraccionArancelaria = fraccionMatch[1].replace(/\D/g, '');
+  }
+
+  // Buscar NICO (2 dígitos)
+  const nicoMatch = text.match(/NICO[\s.:]*(\d{2})/i);
+  if (nicoMatch) {
+    result.nico = nicoMatch[1];
+  }
+
+  return result;
+}

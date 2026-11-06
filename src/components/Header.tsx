@@ -9,6 +9,7 @@ interface HeaderProps {
   onToggleDark: () => void;
   onOpenQuickAction: () => void;
   exchangeRate: number;
+  onOpenLegalNotice?: () => void;
 }
 
 const TAB_TITLES: Record<NavTab, { title: string; breadcrumb: string }> = {
@@ -31,6 +32,18 @@ const TAB_TITLES: Record<NavTab, { title: string; breadcrumb: string }> = {
   shipments: {
     title: 'Gestión de Tráfico & Última Milla',
     breadcrumb: 'AduanaFlow / Monitoreo & Despacho Aduanal',
+  },
+  documents: {
+    title: 'Biblioteca Documental de Comercio Exterior',
+    breadcrumb: 'AduanaFlow / Catálogo Pedagógico de 11 Documentos',
+  },
+  regulations: {
+    title: 'Centro de Normatividad Actualizada',
+    breadcrumb: 'AduanaFlow / Ley Aduanera, LIGIE, RGCE & NOMs',
+  },
+  glossary: {
+    title: 'Glosario Integral de Comercio Exterior',
+    breadcrumb: 'AduanaFlow / Diccionario Técnico para PyMEs',
   },
   'mobile-api': {
     title: 'Portal de API REST & Simulador Móvil',

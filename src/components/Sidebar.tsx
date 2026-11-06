@@ -11,9 +11,22 @@ import {
   ShieldCheck,
   Building2,
   Sparkles,
+  BookOpen,
+  Scale,
+  HelpCircle,
+  ShieldAlert,
 } from 'lucide-react';
 
-export type NavTab = 'dashboard' | 'calculator' | 'pedimentos' | 'incoterms' | 'shipments' | 'mobile-api';
+export type NavTab =
+  | 'dashboard'
+  | 'calculator'
+  | 'pedimentos'
+  | 'incoterms'
+  | 'shipments'
+  | 'documents'
+  | 'regulations'
+  | 'glossary'
+  | 'mobile-api';
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -21,6 +34,7 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   isDark: boolean;
+  onOpenLegalNotice?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
   isDark,
+  onOpenLegalNotice,
 }) => {
   const navItems = [
     {
@@ -61,6 +76,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Gestión de Envíos',
       subtitle: 'Tráfico & Última Milla',
       icon: Truck,
+    },
+    {
+      id: 'documents' as NavTab,
+      label: 'Biblioteca Documental',
+      subtitle: 'Catálogo de 11 Documentos',
+      icon: BookOpen,
+    },
+    {
+      id: 'regulations' as NavTab,
+      label: 'Centro Normativo',
+      subtitle: 'Leyes, RGCE & NOMs',
+      icon: Scale,
+    },
+    {
+      id: 'glossary' as NavTab,
+      label: 'Glosario Aduanal',
+      subtitle: 'Términos & Conceptos PyME',
+      icon: HelpCircle,
     },
     {
       id: 'mobile-api' as NavTab,
@@ -189,6 +222,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
           </div>
+
+          {onOpenLegalNotice && (
+            <button
+              onClick={onOpenLegalNotice}
+              className="mt-3 w-full pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-400 hover:text-amber-500 flex items-center justify-center gap-1 transition-colors"
+            >
+              <ShieldCheck className="h-3 w-3" />
+              <span>Deslinde Legal & Privacidad SAT</span>
+            </button>
+          )}
         </div>
       </aside>
     </>

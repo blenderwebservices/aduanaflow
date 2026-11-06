@@ -6,88 +6,272 @@ import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 
 // src/utils/customsCalculations.ts
-function calculateIncrementablesUSD(incoterm, freightUSD, insuranceUSD, handlingUSD, otherIncrementablesUSD) {
-  const normInco = incoterm.toUpperCase().trim();
-  const baseOther = (handlingUSD || 0) + (otherIncrementablesUSD || 0);
+var TRADE_AGREEMENTS_INFO = {
+  GENERAL: {
+    name: "Tasa General LIGIE (Sin Tratado)",
+    description: "Arancel general de importaci\xF3n seg\xFAn fracci\xF3n arancelaria y DTA al 8 al millar.",
+    igiExemptionDefault: false,
+    dtaType: "MILLAR",
+    fixedDtaAmount: 434,
+    legalReference: "Art. 1 LIGIE y Art. 49 Fracc. I Ley Federal de Derechos."
+  },
+  TMEC: {
+    name: "T-MEC (EE.UU. / Canad\xE1)",
+    description: "Arancel preferencial 0% en bienes originarios calificados y exenci\xF3n del 8 al millar de DTA (aplica cuota fija).",
+    igiExemptionDefault: true,
+    dtaType: "FIXED",
+    fixedDtaAmount: 434,
+    legalReference: "Tratado entre M\xE9xico, EE.UU. y Canad\xE1; Regla 5.1.4 de las RGCE."
+  },
+  TLCUEM: {
+    name: "TLCUEM (Uni\xF3n Europea)",
+    description: "Tratado de Libre Comercio con la Uni\xF3n Europea. Requiere certificado EUR.1 o declaraci\xF3n en factura con exportador autorizado.",
+    igiExemptionDefault: true,
+    dtaType: "MILLAR",
+    fixedDtaAmount: 434,
+    legalReference: "Acuerdo de Asociaci\xF3n Econ\xF3mica M\xE9xico - UE."
+  },
+  TIPAT: {
+    name: "TIPAT / CPTPP (Asia-Pac\xEDfico)",
+    description: "Tratado Integral y Progresista de Asociaci\xF3n Transpac\xEDfico (Jap\xF3n, Vietnam, Australia, Singapur, etc.).",
+    igiExemptionDefault: true,
+    dtaType: "MILLAR",
+    fixedDtaAmount: 434,
+    legalReference: "Cap\xEDtulo de Comercio de Mercanc\xEDas del TIPAT."
+  },
+  ALIANZA_PACIFICO: {
+    name: "Alianza del Pac\xEDfico (Chile, Colombia, Per\xFA)",
+    description: "Desgravaci\xF3n arancelaria para el 92% de las fracciones arancelarias intrarregionales.",
+    igiExemptionDefault: true,
+    dtaType: "MILLAR",
+    fixedDtaAmount: 434,
+    legalReference: "Protocolo Adicional al Acuerdo Marco de la Alianza del Pac\xEDfico."
+  },
+  PROSEC: {
+    name: "PROSEC (Programa de Promoci\xF3n Sectorial)",
+    description: "Arancel preferencial del 0% al 5% para empresas con programa PROSEC autorizado por Secretar\xEDa de Econom\xEDa.",
+    igiExemptionDefault: true,
+    dtaType: "MILLAR",
+    fixedDtaAmount: 434,
+    legalReference: "Decreto PROSEC publicado en el DOF."
+  },
+  REGLA_8VA: {
+    name: "Regla 8va (Fracci\xF3n Arancelaria 9802)",
+    description: "Permiso previo de la Secretar\xEDa de Econom\xEDa para importar insumos o maquinaria no producida en M\xE9xico al 0%.",
+    igiExemptionDefault: true,
+    dtaType: "FIXED",
+    fixedDtaAmount: 434,
+    legalReference: "Regla Complementaria 8\xAA de la LIGIE."
+  }
+};
+function calculateIncrementablesUSD(incoterm, freightUSD, insuranceUSD, param4, param5, param6) {
+  const normInco = (incoterm || "FOB").toUpperCase().trim();
+  let directIncrementables = 0;
+  if (param6 !== void 0) {
+    directIncrementables = (param4 || 0) + (param5 || 0) + (param6 || 0);
+  } else {
+    directIncrementables = (param4 || 0) + (param5 || 0);
+  }
   if (["EXW", "FCA", "FAS", "FOB"].includes(normInco)) {
-    return (freightUSD || 0) + (insuranceUSD || 0) + baseOther;
+    return (freightUSD || 0) + (insuranceUSD || 0) + directIncrementables;
   }
   if (["CFR", "CPT"].includes(normInco)) {
-    return (insuranceUSD || 0) + baseOther;
+    return (insuranceUSD || 0) + directIncrementables;
   }
-  return baseOther;
+  return directIncrementables;
 }
 function calculateLandedCost(input) {
-  const commercialValueUSD = Math.max(0, input.commercialValueUSD || 0);
-  const exchangeRate = Math.max(1e-3, input.exchangeRate || 1);
-  const unitsCount = Math.max(1, input.unitsCount || 1);
-  const incrementablesUSD = calculateIncrementablesUSD(
-    input.incoterm || "FOB",
-    input.freightUSD || 0,
-    input.insuranceUSD || 0,
-    input.handlingUSD || 0,
-    input.otherIncrementablesUSD || 0
-  );
-  const customsValueUSD = commercialValueUSD + incrementablesUSD;
-  const commercialValueMXN = Math.round(commercialValueUSD * exchangeRate * 100) / 100;
-  const incrementablesMXN = Math.round(incrementablesUSD * exchangeRate * 100) / 100;
-  const customsValueMXN = Math.round(customsValueUSD * exchangeRate * 100) / 100;
-  const igiRate = (input.igiRatePercent || 0) / 100;
-  const igiAmountMXN = Math.round(customsValueMXN * igiRate);
-  let dtaAmountMXN = 0;
-  if (input.isDtaFixed) {
-    dtaAmountMXN = input.dtaFixedAmountMXN ?? 415;
-  } else {
-    const calculatedDTA = Math.round(customsValueMXN * 8e-3);
-    dtaAmountMXN = Math.max(415, calculatedDTA);
+  const currency = input.currency || "USD";
+  const exchangeRateToMXN = Math.max(1e-4, input.exchangeRateToMXN || input.exchangeRate || 19.85);
+  let commercialValueUSD = 0;
+  let commercialValueMXN = 0;
+  const invoiceValue = Math.max(0, input.invoiceValue ?? input.commercialValueUSD ?? 0);
+  if (currency === "USD") {
+    commercialValueUSD = invoiceValue;
+    commercialValueMXN = Math.round(commercialValueUSD * exchangeRateToMXN * 100) / 100;
+  } else if (currency === "MXN") {
+    commercialValueMXN = invoiceValue;
+    commercialValueUSD = Math.round(commercialValueMXN / exchangeRateToMXN * 100) / 100;
+  } else if (currency === "EUR") {
+    const eurRateToUSD = input.exchangeRateToUSD || 1.08;
+    commercialValueUSD = Math.round(invoiceValue * eurRateToUSD * 100) / 100;
+    commercialValueMXN = Math.round(commercialValueUSD * exchangeRateToMXN * 100) / 100;
+  } else if (currency === "CNY") {
+    const cnyRateToUSD = input.exchangeRateToUSD || 0.14;
+    commercialValueUSD = Math.round(invoiceValue * cnyRateToUSD * 100) / 100;
+    commercialValueMXN = Math.round(commercialValueUSD * exchangeRateToMXN * 100) / 100;
   }
+  const unitsCount = Math.max(1, input.unitsCount || 1);
+  const incoterm = (input.incoterm || "FOB").toUpperCase().trim();
+  const agreement = input.tradeAgreement || "GENERAL";
+  const agreementMeta = TRADE_AGREEMENTS_INFO[agreement] || TRADE_AGREEMENTS_INFO.GENERAL;
+  const packagingUSD = input.packagingUSD || 0;
+  const handlingUSD = input.handlingUSD || 0;
+  const otherIncUSD = input.otherIncrementablesUSD || 0;
+  const freightUSD = input.freightUSD || 0;
+  const insuranceUSD = input.insuranceUSD || 0;
+  const incrementablesUSD = calculateIncrementablesUSD(
+    incoterm,
+    freightUSD,
+    insuranceUSD,
+    packagingUSD,
+    handlingUSD,
+    otherIncUSD
+  );
+  const incrementablesMXN = Math.round(incrementablesUSD * exchangeRateToMXN * 100) / 100;
+  const customsValueUSD = Math.round((commercialValueUSD + incrementablesUSD) * 100) / 100;
+  const customsValueMXN = Math.round(customsValueUSD * exchangeRateToMXN);
+  let igiRateAppliedPercent = input.igiRatePercent || 0;
+  if (agreement !== "GENERAL" && agreementMeta.igiExemptionDefault && input.igiRatePercent === void 0) {
+    igiRateAppliedPercent = 0;
+  }
+  const igiAmountMXN = Math.round(customsValueMXN * (igiRateAppliedPercent / 100));
+  let dtaAmountMXN = 0;
+  const isDtaFixed = input.isDtaFixed ?? agreementMeta.dtaType === "FIXED";
+  if (isDtaFixed) {
+    dtaAmountMXN = input.dtaFixedAmountMXN ?? agreementMeta.fixedDtaAmount;
+  } else {
+    const dtaMillar = Math.round(customsValueMXN * 8e-3);
+    dtaAmountMXN = Math.max(434, dtaMillar);
+  }
+  const compensatoryRate = (input.compensatoryDutyPercent || 0) / 100;
+  const compensatoryDutyMXN = Math.round(customsValueMXN * compensatoryRate);
   const prvAmountMXN = input.prvMXN ?? 310;
   const cntAmountMXN = input.cntMXN ?? 80;
-  const ivaBaseMXN = customsValueMXN + igiAmountMXN + dtaAmountMXN;
+  const ivaBaseMXN = customsValueMXN + igiAmountMXN + dtaAmountMXN + compensatoryDutyMXN;
   const ivaAmountMXN = Math.round(ivaBaseMXN * 0.16);
-  const totalCustomsTaxesMXN = igiAmountMXN + dtaAmountMXN + prvAmountMXN + cntAmountMXN + ivaAmountMXN;
+  const totalCustomsTaxesMXN = igiAmountMXN + dtaAmountMXN + compensatoryDutyMXN + prvAmountMXN + cntAmountMXN + ivaAmountMXN;
   const brokerRate = (input.brokerFeePercent ?? 0.45) / 100;
   const minBroker = input.brokerMinFeeMXN ?? 4200;
-  const brokerFeeMXN = Math.round(Math.max(minBroker, customsValueMXN * brokerRate));
-  const lastMileDeliveryMXN = Math.round(input.lastMileDeliveryMXN ?? 3800);
-  const totalLandedCostMXN = Math.round(
-    commercialValueMXN + (["EXW", "FCA", "FAS", "FOB"].includes(input.incoterm?.toUpperCase() || "") ? incrementablesMXN : 0) + totalCustomsTaxesMXN + brokerFeeMXN + lastMileDeliveryMXN
+  const brokerFeeSubtotalMXN = Math.round(Math.max(minBroker, customsValueMXN * brokerRate));
+  const brokerFeeIvaMXN = Math.round(brokerFeeSubtotalMXN * 0.16);
+  const brokerFeeTotalMXN = brokerFeeSubtotalMXN + brokerFeeIvaMXN;
+  const storagePortMXN = Math.round(input.storagePortMXN ?? 1800);
+  const maneuversPortMXN = Math.round(input.maneuversPortMXN ?? 1500);
+  const lastMileDeliveryMXN = Math.round(input.lastMileDeliveryMXN ?? 4200);
+  const externalFreightInsuranceMXN = ["EXW", "FCA", "FAS", "FOB"].includes(incoterm) ? incrementablesMXN : 0;
+  const cashDisbursementTotalMXN = Math.round(
+    commercialValueMXN + externalFreightInsuranceMXN + totalCustomsTaxesMXN + brokerFeeTotalMXN + storagePortMXN + maneuversPortMXN + lastMileDeliveryMXN
   );
-  const costPerUnitMXN = Math.round(totalLandedCostMXN / unitsCount * 100) / 100;
-  const costPerUnitUSD = Math.round(costPerUnitMXN / exchangeRate * 100) / 100;
-  const targetMargin = (input.targetMarginPercent ?? 35) / 100;
-  const suggestedSalePriceMXN = targetMargin < 1 ? Math.round(costPerUnitMXN / (1 - targetMargin) * 100) / 100 : costPerUnitMXN * 1.5;
+  const creditableIvaTotalMXN = ivaAmountMXN + brokerFeeIvaMXN;
+  const accountingInventoryCostMXN = Math.round(cashDisbursementTotalMXN - creditableIvaTotalMXN);
+  const costPerUnitMXN = Math.round(accountingInventoryCostMXN / unitsCount * 100) / 100;
+  const costPerUnitUSD = Math.round(costPerUnitMXN / exchangeRateToMXN * 100) / 100;
+  const disbursementPerUnitMXN = Math.round(cashDisbursementTotalMXN / unitsCount * 100) / 100;
+  const targetMargin = Math.min(0.95, Math.max(0.05, (input.targetMarginPercent ?? 35) / 100));
+  const suggestedSalePriceMXN = Math.round(costPerUnitMXN / (1 - targetMargin) * 100) / 100;
   const suggestedMarginAmountMXN = Math.round((suggestedSalePriceMXN - costPerUnitMXN) * 100) / 100;
   const taxRatioPercent = commercialValueMXN > 0 ? Math.round(totalCustomsTaxesMXN / commercialValueMXN * 1e3) / 10 : 0;
+  const breakdown = [
+    {
+      concept: "Valor Comercial de la Mercanc\xEDa",
+      amountMXN: commercialValueMXN,
+      amountUSD: commercialValueUSD,
+      formula: `Factura ${currency} (${invoiceValue.toLocaleString()}) * TC DOF ($${exchangeRateToMXN.toFixed(4)})`,
+      legalBasis: "Art. 64 de la Ley Aduanera (Precio pagado o por pagar)"
+    },
+    {
+      concept: `Incrementables (${incoterm})`,
+      amountMXN: incrementablesMXN,
+      amountUSD: incrementablesUSD,
+      formula: ["EXW", "FCA", "FOB"].includes(incoterm) ? `Flete ($${freightUSD}) + Seguro ($${insuranceUSD}) + Maniobras/Embalaje ($${handlingUSD + packagingUSD})` : `Maniobras y gastos conexos en origen ($${handlingUSD + packagingUSD})`,
+      legalBasis: "Art. 65 Fracc. I de la Ley Aduanera (Gastos a cargo del importador no incluidos en factura)",
+      warningNote: ["EXW", "FOB"].includes(incoterm) && incrementablesUSD === 0 ? "Alerta: Si el Incoterm es FOB o EXW y no se declaran fletes/seguros, la autoridad tipifica subvaluaci\xF3n." : void 0
+    },
+    {
+      concept: "Valor en Aduana (Base Gravable)",
+      amountMXN: customsValueMXN,
+      amountUSD: customsValueUSD,
+      formula: `Valor Comercial ($${commercialValueUSD.toLocaleString()} USD) + Incrementables ($${incrementablesUSD.toLocaleString()} USD) * TC`,
+      legalBasis: "Art. 64 y 65 de la Ley Aduanera (Base del IGI y DTA)"
+    },
+    {
+      concept: `IGI (Impuesto General de Importaci\xF3n: ${igiRateAppliedPercent}%)`,
+      amountMXN: igiAmountMXN,
+      amountUSD: Math.round(igiAmountMXN / exchangeRateToMXN * 100) / 100,
+      formula: `Valor en Aduana ($${customsValueMXN.toLocaleString()} MXN) * ${igiRateAppliedPercent}%`,
+      legalBasis: `${agreementMeta.legalReference} Tratado: ${agreementMeta.name}`
+    },
+    {
+      concept: `DTA (Derecho de Tr\xE1mite Aduanero: ${isDtaFixed ? "Cuota Fija" : "8 al millar"})`,
+      amountMXN: dtaAmountMXN,
+      amountUSD: Math.round(dtaAmountMXN / exchangeRateToMXN * 100) / 100,
+      formula: isDtaFixed ? `Cuota fija conforme al tratado o r\xE9gimen especial: $${dtaAmountMXN} MXN` : `Max($434 cuota m\xEDnima legal, Valor en Aduana * 0.008) = $${dtaAmountMXN.toLocaleString()} MXN`,
+      legalBasis: "Art. 49 de la Ley Federal de Derechos (LFD)"
+    },
+    {
+      concept: "IVA de Importaci\xF3n (16%)",
+      amountMXN: ivaAmountMXN,
+      amountUSD: Math.round(ivaAmountMXN / exchangeRateToMXN * 100) / 100,
+      formula: `[Valor en Aduana ($${customsValueMXN.toLocaleString()}) + IGI ($${igiAmountMXN.toLocaleString()}) + DTA ($${dtaAmountMXN.toLocaleString()})] * 16%`,
+      legalBasis: "Art. 24 y 27 de la Ley del IVA (Base gravable integrada)",
+      warningNote: "Impuesto 100% acreditable fiscalmente en la declaraci\xF3n mensual del SAT. No constituye costo de venta.",
+      isCreditableTax: true
+    },
+    {
+      concept: "Prevalidaci\xF3n (PRV) y Contraprestaci\xF3n (CNT)",
+      amountMXN: prvAmountMXN + cntAmountMXN,
+      amountUSD: Math.round((prvAmountMXN + cntAmountMXN) / exchangeRateToMXN * 100) / 100,
+      formula: `Prevalidaci\xF3n ($${prvAmountMXN} MXN) + Contraprestaci\xF3n ($${cntAmountMXN} MXN)`,
+      legalBasis: "Art. 16-A y 16-B de la Ley Aduanera y Regla 1.8.2 de las RGCE"
+    },
+    {
+      concept: "Honorarios Agente Aduanal + IVA",
+      amountMXN: brokerFeeTotalMXN,
+      amountUSD: Math.round(brokerFeeTotalMXN / exchangeRateToMXN * 100) / 100,
+      formula: `Honorarios ($${brokerFeeSubtotalMXN.toLocaleString()} MXN) + IVA 16% ($${brokerFeeIvaMXN.toLocaleString()} MXN)`,
+      legalBasis: "Art. 160 de la Ley Aduanera y arancel privado de servicios aduanales",
+      isCreditableTax: false
+    },
+    {
+      concept: "Almacenajes, Maniobras y Flete \xDAltima Milla",
+      amountMXN: storagePortMXN + maneuversPortMXN + lastMileDeliveryMXN,
+      amountUSD: Math.round((storagePortMXN + maneuversPortMXN + lastMileDeliveryMXN) / exchangeRateToMXN * 100) / 100,
+      formula: `Almacenaje ($${storagePortMXN}) + Maniobras ($${maneuversPortMXN}) + Transporte Terrestre ($${lastMileDeliveryMXN})`,
+      legalBasis: "Contratos log\xEDsticos y maniobras portuarias en recinto fiscalizado"
+    }
+  ];
   return {
+    currency,
+    commercialValueOriginal: invoiceValue,
     commercialValueUSD,
     commercialValueMXN,
     incrementablesUSD,
     incrementablesMXN,
     customsValueUSD,
     customsValueMXN,
+    igiRateAppliedPercent,
     igiAmountMXN,
     dtaAmountMXN,
+    compensatoryDutyMXN,
     prvAmountMXN,
     cntAmountMXN,
     ivaBaseMXN,
     ivaAmountMXN,
     totalCustomsTaxesMXN,
-    brokerFeeMXN,
+    brokerFeeMXN: brokerFeeSubtotalMXN,
+    brokerFeeIvaMXN,
+    storagePortMXN,
+    maneuversPortMXN,
     lastMileDeliveryMXN,
-    totalLandedCostMXN,
+    cashDisbursementTotalMXN,
+    creditableIvaTotalMXN,
+    accountingInventoryCostMXN,
+    unitsCount,
     costPerUnitMXN,
     costPerUnitUSD,
+    disbursementPerUnitMXN,
     suggestedSalePriceMXN,
     suggestedMarginAmountMXN,
-    taxRatioPercent
+    taxRatioPercent,
+    breakdown
   };
 }
 var COMMON_TARIFFS = [
   {
     hsCode: "8471.30.01",
     nico: "00",
-    description: "M\xE1quinas autom\xE1ticas para tratamiento o procesamiento de datos, port\xE1tiles (Laptops/Notebooks)",
+    description: "M\xE1quinas autom\xE1ticas para tratamiento de datos, port\xE1tiles (Laptops/Notebooks)",
     igiPercent: 0,
     unit: "Pieza",
     regulations: ["NOM-001-SCFI-2018 (Seguridad electr\xF3nica)", "NOM-019-SCFI-1998 (Equipo perif\xE9rico)", "NOM-024-SCFI-2013 (Garant\xEDas)"]
@@ -234,6 +418,7 @@ function auditPedimento(data) {
     }
   }
   const claveNorm = data.clavePedimento?.toUpperCase().trim();
+  const regimenNorm = data.regimenAduanero?.toUpperCase().trim();
   if (!claveNorm || !VALID_CLAVES_PEDIMENTO[claveNorm]) {
     issues.push({
       field: "clavePedimento",
@@ -242,6 +427,25 @@ function auditPedimento(data) {
       message: `La clave "${data.clavePedimento}" no es una clave v\xE1lida del Ap\xE9ndice 2 del Anexo 22.`,
       legalReference: "Anexo 22 RGCE, Ap\xE9ndice 2.",
       suggestedAction: "Seleccione una clave v\xE1lida como A1 (Definitivo), IN (IMMEX) o V1."
+    });
+  }
+  if (claveNorm === "A1" && regimenNorm !== "IMD" && regimenNorm !== "EXD") {
+    issues.push({
+      field: "regimenAduanero",
+      severity: "CRITICAL",
+      title: "Incompatibilidad entre Clave A1 y R\xE9gimen Aduanero",
+      message: `La clave A1 ampara importaci\xF3n/exportaci\xF3n definitiva y debe declararse bajo r\xE9gimen IMD (Importaci\xF3n Definitiva) o EXD, pero se declar\xF3 "${regimenNorm}".`,
+      legalReference: "Anexo 22 RGCE, Ap\xE9ndice 2 y 16.",
+      suggestedAction: "Ajuste el r\xE9gimen aduanero a IMD para importaciones definitivas comerciales."
+    });
+  } else if ((claveNorm === "IN" || claveNorm === "AF") && regimenNorm !== "ITR") {
+    issues.push({
+      field: "regimenAduanero",
+      severity: "CRITICAL",
+      title: "Clave IMMEX incompatible con r\xE9gimen aduanero",
+      message: `Las claves IN (Insumos) y AF (Activo Fijo) exigen r\xE9gimen ITR (Importaci\xF3n Temporal para Elaboraci\xF3n/Transformaci\xF3n), pero se declar\xF3 "${regimenNorm}".`,
+      legalReference: "Anexo 22 RGCE y Decreto IMMEX.",
+      suggestedAction: "Corrija el r\xE9gimen aduanero a ITR o la clave a A1 si es definitiva."
     });
   }
   if (!validateRFC(data.rfcImportador)) {
@@ -491,8 +695,8 @@ var INCOTERMS_2020 = [
     costTransferPoint: "En las instalaciones del vendedor (el comprador cubre el 100% de la cadena log\xEDstica).",
     transportTypes: ["A\xE9reo", "Mar\xEDtimo", "Terrestre", "Ferroviario", "Multimodal"],
     pymeRecommendation: "CAUTION",
-    pymeRecommendationText: "No recomendado para PyMEs novatas. La PyME compradora debe tramitar el despacho aduanal de exportaci\xF3n en el pa\xEDs de origen (ej. China o Europa), lo cual es sumamente complejo sin presencia f\xEDsica o agente local.",
-    commonPitfall: "Creer que es el m\xE1s barato porque el precio unitario es menor, pero al sumar fletes locales, maniobras en origen y tr\xE1mites aduanales extranjeros el costo final se dispara.",
+    pymeRecommendationText: "Uso desaconsejado en importaciones transoce\xE1nicas salvo que se cuente con un Freight Forwarder con presencia legal y fiscal en el pa\xEDs de origen. La C\xE1mara de Comercio Internacional (ICC) advierte que el vendedor no tiene obligaci\xF3n de cargar la mercanc\xEDa ni de tramitar el despacho aduanal de exportaci\xF3n en origen.",
+    commonPitfall: "Creer err\xF3neamente que es el t\xE9rmino m\xE1s econ\xF3mico por ver un precio unitario menor en proforma; al sumar maniobras en f\xE1brica extranjera, permisos locales y exportaci\xF3n for\xE1nea, el coste final se encarece dr\xE1sticamente.",
     obligations: {
       packaging: "SELLER",
       originLoading: "BUYER",
@@ -511,12 +715,12 @@ var INCOTERMS_2020 = [
     name: "Free Carrier",
     nameEs: "Franco Porteador",
     category: "MULTIMODAL",
-    riskTransferPoint: "Al entregar la mercanc\xEDa al transportista designado por el comprador en el punto convenido de origen.",
-    costTransferPoint: "Punto de entrega acordado en el pa\xEDs de origen (el vendedor despacha la exportaci\xF3n).",
+    riskTransferPoint: "Supuesto A: En instalaciones del vendedor cargado en el veh\xEDculo; Supuesto B: En terminal convenida puesto a disposici\xF3n sin descargar.",
+    costTransferPoint: "Punto convenido de entrega en origen con despacho de exportaci\xF3n cubierto por el vendedor.",
     transportTypes: ["A\xE9reo", "Mar\xEDtimo", "Terrestre", "Ferroviario", "Multimodal"],
     pymeRecommendation: "HIGH",
-    pymeRecommendationText: "Altamente recomendado para PyMEs que importan por v\xEDa a\xE9rea o contenedores completos. El proveedor extranjero asume el despacho aduanero de exportaci\xF3n y la PyME mexicana mantiene el control del flete internacional y tarifas.",
-    commonPitfall: "No especificar con exactitud el punto geogr\xE1fico de entrega dentro de la ciudad o puerto del proveedor.",
+    pymeRecommendationText: "El t\xE9rmino id\xF3neo recomendado por la ICC para carga mar\xEDtima en contenedores y v\xEDa a\xE9rea. El exportador asume el despacho de exportaci\xF3n en su pa\xEDs, y la PyME mexicana asume el control directo de tarifas y tiempos del flete internacional al recibir en terminal o bodega.",
+    commonPitfall: 'No especificar con precisi\xF3n milim\xE9trica la direcci\xF3n del punto de entrega (ej. "FCA Shanghai Port Container Terminal #3" en lugar de solo "FCA Shanghai").',
     obligations: {
       packaging: "SELLER",
       originLoading: "SELLER",
@@ -559,12 +763,12 @@ var INCOTERMS_2020 = [
     name: "Carriage and Insurance Paid To",
     nameEs: "Transporte y Seguro Pagados Hasta",
     category: "MULTIMODAL",
-    riskTransferPoint: "Al entregar la mercanc\xEDa al primer transportista en origen.",
-    costTransferPoint: "En el lugar convenido de destino, con seguro internacional cubierto por el vendedor (cobertura amplia Cl\xE1usula A).",
+    riskTransferPoint: "Al entregar la mercanc\xEDa al primer transportista en el pa\xEDs de origen.",
+    costTransferPoint: "En el lugar convenido de destino en M\xE9xico, con transporte y seguro internacional pagados por el exportador.",
     transportTypes: ["A\xE9reo", "Mar\xEDtimo", "Terrestre", "Multimodal"],
     pymeRecommendation: "HIGH",
-    pymeRecommendationText: "Excelente para importaciones a\xE9reas o multimodales. El vendedor paga el flete y un seguro con cobertura m\xE1xima (Cl\xE1usulas del Instituto de Londres A).",
-    commonPitfall: "No verificar que la p\xF3liza de seguro emitida en el extranjero tenga cobertura endosable y reclamable por la PyME en M\xE9xico.",
+    pymeRecommendationText: 'A diferencia de CIF, en Incoterms 2020 la regla CIP obliga al vendedor a contratar cobertura m\xE1xima "Cl\xE1usula A" de las Institute Cargo Clauses (Todo Riesgo). Es la opci\xF3n id\xF3nea para mercanc\xEDa de alto valor tecnol\xF3gico o productos industriales transportados por avi\xF3n o multimodal.',
+    commonPitfall: "No verificar que la p\xF3liza de seguro emitida en el extranjero tenga endoso y cl\xE1usula de reclamo directo pagadero en M\xE9xico a favor de la empresa compradora.",
     obligations: {
       packaging: "SELLER",
       originLoading: "SELLER",
@@ -679,12 +883,12 @@ var INCOTERMS_2020 = [
     name: "Free On Board",
     nameEs: "Franco a Bordo",
     category: "MARITIMO",
-    riskTransferPoint: "A bordo del buque en el puerto de embarque convenido.",
-    costTransferPoint: "A bordo del buque en el puerto de origen.",
+    riskTransferPoint: "A bordo del buque (una vez sobrepasada y estibada la mercanc\xEDa en el barco convenido en el puerto de origen).",
+    costTransferPoint: "A bordo del buque en el puerto de salida designado.",
     transportTypes: ["Mar\xEDtimo", "V\xEDas navegables interiores"],
     pymeRecommendation: "HIGH",
-    pymeRecommendationText: "El Incoterm rey para importaciones mar\xEDtimas desde Asia y Europa. El exportador cubre todos los costos y permisos en su pa\xEDs hasta subir el contenedor al barco. La PyME mexicana negocia y controla su propio flete mar\xEDtimo hacia Manzanillo o Veracruz.",
-    commonPitfall: "No contratar seguro internacional asumiendo que el flete mar\xEDtimo lo incluye (las navieras tienen responsabilidad limitada por ley).",
+    pymeRecommendationText: "Regla hist\xF3rica exclusiva para transporte mar\xEDtimo y fluvial. Advertencia t\xE9cnica de la ICC: NO debe emplearse cuando la mercanc\xEDa se entrega en un contenedor en la terminal portuaria antes de subir a bordo (en ese caso debe usarse FCA), ya que si ocurre un siniestro en el patio de contenedores antes de la carga, la responsabilidad legal queda en disputa.",
+    commonPitfall: "Usar FOB para contenedores mar\xEDtimos entregados d\xEDas antes en el patio de la terminal portuaria, en lugar de FCA.",
     obligations: {
       packaging: "SELLER",
       originLoading: "SELLER",
@@ -727,12 +931,12 @@ var INCOTERMS_2020 = [
     name: "Cost, Insurance and Freight",
     nameEs: "Costo, Seguro y Flete",
     category: "MARITIMO",
-    riskTransferPoint: "A bordo del buque en el puerto de embarque en origen.",
-    costTransferPoint: "Puerto de destino convenido, con flete y seguro cubiertos por el vendedor (cobertura m\xEDnima Cl\xE1usula C).",
+    riskTransferPoint: "A bordo del buque en el puerto de embarque de origen (\xA1el riesgo se transfiere al comprador ANTES de zarpar!).",
+    costTransferPoint: "Puerto de destino convenido, con flete mar\xEDtimo y seguro cubiertos por el vendedor.",
     transportTypes: ["Mar\xEDtimo", "V\xEDas navegables"],
     pymeRecommendation: "MEDIUM",
-    pymeRecommendationText: "Popular en importaciones mar\xEDtimas, pero en Incoterms 2020 el vendedor s\xF3lo est\xE1 obligado a contratar la cobertura m\xEDnima (Cl\xE1usulas C del Instituto). Para carga de alto valor o electr\xF3nica, se recomienda solicitar Cl\xE1usula A o comprar seguro propio.",
-    commonPitfall: "La cobertura C no ampara robo parcial, mermas ni humedad, lo que deja desprotegida a la PyME en muchos siniestros frecuentes.",
+    pymeRecommendationText: 'Exclusivo mar\xEDtimo. Obligaci\xF3n de seguro en Incoterms 2020: El vendedor solo est\xE1 obligado a contratar la cobertura m\xEDnima "Cl\xE1usula C" de las Institute Cargo Clauses (LMA/IUA), que \xFAnicamente cubre siniestros mayores (naufragio, encallamiento, incendio). No cubre robo parcial, aver\xEDa por agua salada ni rotura, salvo que se pacte p\xF3liza suplementaria.',
+    commonPitfall: "Desconocer que la cobertura Cl\xE1usula C no ampara robos ni da\xF1os menores de manipulaci\xF3n, dejando a la PyME sin indemnizaci\xF3n ante siniestros recurrentes.",
     obligations: {
       packaging: "SELLER",
       originLoading: "SELLER",

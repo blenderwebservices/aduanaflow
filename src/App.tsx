@@ -7,6 +7,10 @@ import { PedimentoAuditor } from './components/PedimentoAuditor';
 import { IncotermsMatrix } from './components/IncotermsMatrix';
 import { ShipmentsDashboard } from './components/ShipmentsDashboard';
 import { MobileApiPortal } from './components/MobileApiPortal';
+import { DocumentLibrary } from './components/DocumentLibrary';
+import { RegulationsCenter } from './components/RegulationsCenter';
+import { CustomsGlossary } from './components/CustomsGlossary';
+import { LegalNoticeModal } from './components/LegalNoticeModal';
 import { ShipmentRecord } from '../server';
 
 const INITIAL_SHIPMENTS: ShipmentRecord[] = [
@@ -106,6 +110,7 @@ export default function App() {
   const [isOpenMobile, setIsOpenMobile] = useState<boolean>(false);
   const [shipments, setShipments] = useState<ShipmentRecord[]>(INITIAL_SHIPMENTS);
   const [selectedShipmentForModal, setSelectedShipmentForModal] = useState<ShipmentRecord | null>(null);
+  const [isLegalNoticeOpen, setIsLegalNoticeOpen] = useState(false);
   const [exchangeRate] = useState<number>(19.85);
 
   // Sync dark class with document element
@@ -182,6 +187,7 @@ export default function App() {
         isOpenMobile={isOpenMobile}
         onCloseMobile={() => setIsOpenMobile(false)}
         isDark={isDark}
+        onOpenLegalNotice={() => setIsLegalNoticeOpen(true)}
       />
 
       {/* Main Content Viewport */}
@@ -193,6 +199,7 @@ export default function App() {
           onToggleDark={() => setIsDark((v) => !v)}
           onOpenQuickAction={() => setCurrentTab('calculator')}
           exchangeRate={exchangeRate}
+          onOpenLegalNotice={() => setIsLegalNoticeOpen(true)}
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
@@ -231,11 +238,30 @@ export default function App() {
             />
           )}
 
+          {currentTab === 'documents' && (
+            <DocumentLibrary isDark={isDark} />
+          )}
+
+          {currentTab === 'regulations' && (
+            <RegulationsCenter isDark={isDark} />
+          )}
+
+          {currentTab === 'glossary' && (
+            <CustomsGlossary isDark={isDark} />
+          )}
+
           {currentTab === 'mobile-api' && (
             <MobileApiPortal isDark={isDark} shipments={shipments} />
           )}
         </main>
       </div>
+
+      {/* Legal Notice, Privacy & Terms Modal */}
+      <LegalNoticeModal
+        isOpen={isLegalNoticeOpen}
+        onClose={() => setIsLegalNoticeOpen(false)}
+        isDark={isDark}
+      />
     </div>
   );
 }

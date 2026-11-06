@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Truck,
   Plus,
@@ -41,12 +41,45 @@ export const ShipmentsDashboard: React.FC<ShipmentsDashboardProps> = ({
 
   // Last-mile quote tool state
   const [quotePort, setQuotePort] = useState('160 - Manzanillo');
+  const [quotePortCP, setQuotePortCP] = useState('28200');
   const [quoteDest, setQuoteDest] = useState('Guadalajara, Jalisco');
+  const [quoteDestCP, setQuoteDestCP] = useState('44100');
   const [quoteWeight, setQuoteWeight] = useState(500);
   const [quotePackages, setQuotePackages] = useState(25);
+  const [quoteLength, setQuoteLength] = useState(120); // cm
+  const [quoteWidth, setQuoteWidth] = useState(100); // cm
+  const [quoteHeight, setQuoteHeight] = useState(140); // cm
+  const [cargoType, setCargoType] = useState('GENERAL_DRY');
+  const [deliveryCondition, setDeliveryCondition] = useState('RAMP'); // RAMP, FLOOR, SPECIAL
   const [quoteSpeed, setQuoteSpeed] = useState<'STANDARD' | 'EXPRESS'>('STANDARD');
   const [quoteResult, setQuoteResult] = useState<any>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+
+  // Volumetric weight calculation (cm / 4000 for overland freight in Mexico)
+  const volumetricWeightKg = useMemo(() => {
+    const vol = (quoteLength * quoteWidth * quoteHeight) / 4000;
+    return Math.round(vol * Math.max(1, quotePackages));
+  }, [quoteLength, quoteWidth, quoteHeight, quotePackages]);
+
+  const chargeableWeightKg = Math.max(quoteWeight, volumetricWeightKg);
+
+  // Checklist state
+  const [checkedSteps, setCheckedSteps] = useState<Record<number, boolean>>({
+    1: true,
+    2: true,
+    3: true,
+    4: false,
+    5: false,
+    6: false,
+    7: false,
+  });
+
+  const toggleChecklistStep = (stepNumber: number) => {
+    setCheckedSteps(prev => ({
+      ...prev,
+      [stepNumber]: !prev[stepNumber],
+    }));
+  };
 
   // New Shipment Form State
   const [formData, setFormData] = useState({
@@ -301,7 +334,7 @@ export const ShipmentsDashboard: React.FC<ShipmentsDashboardProps> = ({
       <div className={`p-6 rounded-2xl border ${
         isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-white'
       } shadow-xs`}>
-        <div className="border-b pb-3 border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="border-b pb-3 border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase">
               <Truck className="h-4 w-4" />
@@ -311,45 +344,117 @@ export const ShipmentsDashboard: React.FC<ShipmentsDashboardProps> = ({
               Tarifador de Flete Terrestre Consolidado para Pequeñas Empresas
             </h3>
           </div>
+
+          <span className="px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            Cotización Estimativa · No Vinculante
+          </span>
         </div>
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Puerto / Aduana de Salida
+              Aduana / CP Origen
             </label>
-            <select
-              value={quotePort}
-              onChange={(e) => setQuotePort(e.target.value)}
-              className={`w-full px-2.5 py-1.5 text-xs rounded-lg border outline-none ${
-                isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
-              }`}
-            >
-              <option value="160 - Manzanillo">160 - Manzanillo, Colima</option>
-              <option value="240 - Nuevo Laredo">240 - Nuevo Laredo, Tamaulipas</option>
-              <option value="470 - AICM / Pantaco">470 - AICM / Pantaco, CDMX</option>
-              <option value="430 - Veracruz">430 - Veracruz, Veracruz</option>
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={quotePort}
+                onChange={(e) => {
+                  setQuotePort(e.target.value);
+                  if (e.target.value.includes('Manzanillo')) setQuotePortCP('28200');
+                  else if (e.target.value.includes('Nuevo Laredo')) setQuotePortCP('88000');
+                  else if (e.target.value.includes('AICM')) setQuotePortCP('15620');
+                  else if (e.target.value.includes('Veracruz')) setQuotePortCP('91700');
+                }}
+                className={`w-2/3 px-2 py-1.5 text-xs rounded-lg border outline-none ${
+                  isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+                }`}
+              >
+                <option value="160 - Manzanillo">160 - Manzanillo</option>
+                <option value="240 - Nuevo Laredo">240 - Nuevo Laredo</option>
+                <option value="470 - AICM / Pantaco">470 - AICM / Pantaco</option>
+                <option value="430 - Veracruz">430 - Veracruz</option>
+              </select>
+              <input
+                type="text"
+                value={quotePortCP}
+                onChange={(e) => setQuotePortCP(e.target.value)}
+                placeholder="C.P."
+                className={`w-1/3 px-2 py-1.5 text-xs font-mono rounded-lg border outline-none ${
+                  isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+                }`}
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Ciudad de Destino PyME
+              Destino PyME & C.P.
             </label>
-            <input
-              type="text"
-              value={quoteDest}
-              onChange={(e) => setQuoteDest(e.target.value)}
-              className={`w-full px-2.5 py-1.5 text-xs rounded-lg border outline-none ${
-                isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
-              }`}
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={quoteDest}
+                onChange={(e) => setQuoteDest(e.target.value)}
+                className={`w-2/3 px-2.5 py-1.5 text-xs rounded-lg border outline-none ${
+                  isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+                }`}
+              />
+              <input
+                type="text"
+                value={quoteDestCP}
+                onChange={(e) => setQuoteDestCP(e.target.value)}
+                placeholder="C.P."
+                className={`w-1/3 px-2 py-1.5 text-xs font-mono rounded-lg border outline-none ${
+                  isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+                }`}
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Peso (kg) & Bultos
+              Dimensiones (L x W x H cm)
             </label>
+            <div className="flex gap-1">
+              <input
+                type="number"
+                value={quoteLength}
+                onChange={(e) => setQuoteLength(Number(e.target.value) || 1)}
+                placeholder="L"
+                className={`w-1/3 px-1.5 py-1.5 text-xs font-mono rounded-lg border outline-none ${
+                  isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+                }`}
+              />
+              <input
+                type="number"
+                value={quoteWidth}
+                onChange={(e) => setQuoteWidth(Number(e.target.value) || 1)}
+                placeholder="W"
+                className={`w-1/3 px-1.5 py-1.5 text-xs font-mono rounded-lg border outline-none ${
+                  isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+                }`}
+              />
+              <input
+                type="number"
+                value={quoteHeight}
+                onChange={(e) => setQuoteHeight(Number(e.target.value) || 1)}
+                placeholder="H"
+                className={`w-1/3 px-1.5 py-1.5 text-xs font-mono rounded-lg border outline-none ${
+                  isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+                }`}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Peso Báscula vs Cubicaje
+              </label>
+              <span className="text-[10px] text-amber-500 font-mono">
+                {volumetricWeightKg} kg vol.
+              </span>
+            </div>
             <div className="flex gap-2">
               <input
                 type="number"
@@ -359,7 +464,7 @@ export const ShipmentsDashboard: React.FC<ShipmentsDashboardProps> = ({
                 className={`w-1/2 px-2.5 py-1.5 text-xs font-mono rounded-lg border outline-none ${
                   isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
                 }`}
-                placeholder="kg"
+                placeholder="kg físico"
               />
               <input
                 type="number"
@@ -372,6 +477,44 @@ export const ShipmentsDashboard: React.FC<ShipmentsDashboardProps> = ({
                 placeholder="bultos"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Commodity and Delivery Conditions */}
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Tipo de Carga
+            </label>
+            <select
+              value={cargoType}
+              onChange={(e) => setCargoType(e.target.value)}
+              className={`w-full px-2.5 py-1.5 text-xs rounded-lg border outline-none ${
+                isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+              }`}
+            >
+              <option value="GENERAL_DRY">Carga General Seca (Pallets/Cajas)</option>
+              <option value="ELECTRONICS">Electrónica & Componentes (Custodia)</option>
+              <option value="PERISHABLE">Perecedero / Refrigerado</option>
+              <option value="HAZMAT">Material Regulado / Químico</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Condición de Descarga
+            </label>
+            <select
+              value={deliveryCondition}
+              onChange={(e) => setDeliveryCondition(e.target.value)}
+              className={`w-full px-2.5 py-1.5 text-xs rounded-lg border outline-none ${
+                isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
+              }`}
+            >
+              <option value="RAMP">Unidad con Rampa Hidráulica</option>
+              <option value="FLOOR">Entrega a Piso en Andén PyME</option>
+              <option value="CRANE">Maniobra Especial con Grúa</option>
+            </select>
           </div>
 
           <div>
@@ -403,28 +546,105 @@ export const ShipmentsDashboard: React.FC<ShipmentsDashboardProps> = ({
               </button>
             </div>
           </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={handleQuoteSubmit}
+              disabled={quoteLoading}
+              className="w-full py-2 text-xs font-semibold rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:opacity-50 transition-colors shadow-xs"
+            >
+              {quoteLoading ? 'Calculando flete...' : 'Cotizar Flete Estimado'}
+            </button>
+          </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between">
-          <button
-            onClick={handleQuoteSubmit}
-            disabled={quoteLoading}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:opacity-50 transition-colors shadow-xs"
-          >
-            {quoteLoading ? 'Calculando flete...' : 'Cotizar Flete de Última Milla'}
-          </button>
-
-          {quoteResult && (
-            <div className="text-right">
-              <span className="text-xs text-slate-500">Costo Estimado Puerta a Puerta:</span>
-              <div className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400">
+        {quoteResult && (
+          <div className={`mt-4 p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+            isDark ? 'border-amber-500/30 bg-amber-950/20' : 'border-amber-200 bg-amber-50'
+          }`}>
+            <div>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Resultado de Cotización Estimada (Ruta: {quotePort} → {quoteDest}):
+              </span>
+              <div className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400">
                 ${quoteResult.totalCostMXN.toLocaleString()} MXN
-                <span className="text-xs font-normal text-slate-400 ml-1">
-                  ({quoteResult.estimatedDays} {quoteResult.estimatedDays === 1 ? 'día hábil' : 'días hábiles'})
+                <span className="text-xs font-normal text-slate-400 ml-2">
+                  (Tiempo estimado: {quoteResult.estimatedDays} {quoteResult.estimatedDays === 1 ? 'día hábil' : 'días hábiles'})
                 </span>
               </div>
             </div>
-          )}
+            <div className="text-right text-[11px] text-slate-500">
+              <div>Peso Tasado: <strong>{chargeableWeightKg} kg</strong></div>
+              <div>Condición: {deliveryCondition === 'RAMP' ? 'Rampa Hidráulica' : 'Piso Andén'}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Checklist Integrado de Pedidos e Importaciones */}
+      <div className={`p-6 rounded-2xl border ${
+        isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-white'
+      } shadow-xs`}>
+        <div className="flex items-center justify-between border-b pb-3 border-slate-200 dark:border-slate-800">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Control Operativo de Cumplimiento</span>
+            </div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mt-0.5">
+              Checklist Integral de Pedidos & Expediente Aduanal
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Verificación paso a paso para evitar demoras, multas y retenciones en aduana.
+            </p>
+          </div>
+          <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
+            {Object.values(checkedSteps).filter(Boolean).length} / 7 Completados
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            { step: 1, title: '1. Orden de Compra & Incoterm', desc: 'Contrato mercantil, PO firmada e Incoterm 2020 acordado con punto exacto.' },
+            { step: 2, title: '2. Clasificación & NOMs', desc: 'Validación de Fracción Arancelaria (8 dígitos) + NICO y pruebas de laboratorio NOM.' },
+            { step: 3, title: '3. Factura & Packing List', desc: 'Cotejo de descripción comercial sin tecnicismos genéricos y pesos báscula vs bultos.' },
+            { step: 4, title: '4. Flete & Seguro Internacional', desc: 'Emisión de B/L o AWB y póliza de seguro de carga con cobertura adecuada.' },
+            { step: 5, title: '5. VUCEM: COVE & Manifestación', desc: 'Transmisión electrónica de factura (E-Document) y Manifestación de Valor con e.firma.' },
+            { step: 6, title: '6. Validación de Pedimento SAT', desc: 'Proforma del Agente Aduanal revisada con 15 dígitos y pago de contribuciones (PE).' },
+            { step: 7, title: '7. Carta Porte & Última Milla', desc: 'CFDI con Complemento Carta Porte 3.1 verificado antes de salida del recinto aduanal.' },
+          ].map(item => {
+            const isDone = !!checkedSteps[item.step];
+            return (
+              <div
+                key={item.step}
+                onClick={() => toggleChecklistStep(item.step)}
+                className={`p-3.5 rounded-xl border cursor-pointer select-none transition-all ${
+                  isDone
+                    ? isDark
+                      ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-200'
+                      : 'border-emerald-300 bg-emerald-50 text-emerald-950'
+                    : isDark
+                    ? 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isDone}
+                    onChange={() => {}}
+                    className="h-4 w-4 rounded text-amber-500 focus:ring-0 cursor-pointer"
+                  />
+                  <span className={`text-xs font-bold ${isDone ? 'line-through opacity-80' : 'text-slate-900 dark:text-white'}`}>
+                    {item.title}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[11px] opacity-80 pl-6 leading-relaxed">
+                  {item.desc}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
